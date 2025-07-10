@@ -1,0 +1,116 @@
+# Nocturne TUI Menu Configuration
+# Each menu item has a unique ID and can reference parent menus
+
+[menu]
+title = "Nocturne Main Menu"
+description = "System administration and monitoring tools"
+root_menu = "main"
+
+# Define all menu items with unique IDs
+[items.main]
+type = "menu"
+name = "Main Menu"
+description = "System administration and monitoring tools"
+items = ["system_info", "network_tools", "process_mgmt", "quick_actions"]
+
+[items.system_info]
+type = "submenu"
+name = "System Info"
+description = "View system information and status"
+items = ["cpu_info", "memory_usage", "disk_usage"]
+
+[items.cpu_info]
+type = "action"
+name = "CPU Info"
+description = "Display CPU information"
+command = "lscpu"
+
+[items.memory_usage]
+type = "action"
+name = "Memory Usage"
+description = "Show memory usage statistics"
+command = "free -h"
+
+[items.disk_usage]
+type = "action"
+name = "Disk Usage"
+description = "Display disk space usage"
+command = "df -h"
+
+[items.network_tools]
+type = "submenu"
+name = "Network Tools"
+description = "Network diagnostics and monitoring"
+items = ["net_interfaces", "ping_tests"]
+
+[items.net_interfaces]
+type = "action"
+name = "Network Interfaces"
+description = "Show network interface configuration"
+command = "ip addr show"
+
+[items.ping_tests]
+type = "submenu"
+name = "Ping Tests"
+description = "Network connectivity tests"
+items = ["ping_google", "ping_gateway"]
+
+[items.ping_google]
+type = "action"
+name = "Ping Google"
+description = "Test connectivity to Google DNS"
+command = "ping -c 4 8.8.8.8"
+
+[items.ping_gateway]
+type = "action"
+name = "Ping Local Gateway"
+description = "Test connectivity to local gateway"
+command = "ping -c 4 $(ip route | grep default | awk '{print $3}' | head -1)"
+
+[items.process_mgmt]
+type = "submenu"
+name = "Process Management"
+description = "View and manage running processes"
+items = ["top_processes", "memory_by_process", "test1", "test2"]
+
+[items.top_processes]
+type = "action"
+name = "Top Processes"
+description = "Show top CPU consuming processes"
+command = "ps aux --sort=-%cpu"
+
+[items.test1]
+type = "action"
+name = "Test item 1"
+description = "Just a test item"
+command = "sudo ls -la /home/adary"
+
+[items.test2]
+type = "action"
+name = "Test item 2"
+description = "Testing a script"
+command = "$HOME/scripts/test_script.sh"
+
+[items.memory_by_process]
+type = "action"
+name = "Memory Usage by Process"
+description = "Show processes sorted by memory usage"
+command = "ps aux --sort=-%mem"
+
+[items.quick_actions]
+type = "submenu"
+name = "Quick Actions"
+description = "Common system administration tasks"
+items = ["system_update", "clear_cache"]
+
+[items.system_update]
+type = "action"
+name = "System Update"
+description = "Update system packages (requires sudo)"
+command = "sudo pacman -Syu"
+
+[items.clear_cache]
+type = "action"
+name = "Clear Cache"
+description = "Clear package cache"
+command = "sudo pacman -Sc"
