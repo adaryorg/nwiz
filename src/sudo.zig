@@ -92,10 +92,10 @@ fn renewalThreadFn() void {
     while (!sudo_manager.shouldStop() and !shouldShutdown()) {
         sudo_manager.reauth(allocator) catch {};
         
-        // Sleep for 30 seconds before checking again, but check for shutdown every second
-        var sleep_count: u8 = 0;
-        while (sleep_count < 30 and !shouldShutdown()) {
-            std.time.sleep(1 * std.time.ns_per_s);
+        // Sleep for 30 seconds before checking again, but check for shutdown every 50ms for responsiveness
+        var sleep_count: u16 = 0;
+        while (sleep_count < 600 and !shouldShutdown()) {  // 600 * 50ms = 30 seconds
+            std.time.sleep(50 * std.time.ns_per_ms);  // 50ms sleep intervals
             sleep_count += 1;
         }
     }
