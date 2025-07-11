@@ -1,116 +1,133 @@
-# Nocturne TUI Menu Configuration
-# Each menu item has a unique ID and can reference parent menus
-
+# Nocturne TUI Menu Configuration - Key-based structure
 [menu]
 title = "Nocturne Main Menu"
-description = "System administration and monitoring tools"
-root_menu = "main"
+description = "Nocturne desktop environment management"
 
-# Define all menu items with unique IDs
-[items.main]
-type = "menu"
-name = "Main Menu"
-description = "System administration and monitoring tools"
-items = ["system_info", "network_tools", "process_mgmt", "quick_actions"]
+# ASCII Art Configuration (max 8 rows)
+ascii_art = [
+    "███    ██  ██████   ██████ ████████ ██    ██ ██████  ███    ██ ███████",
+    "████   ██ ██    ██ ██         ██    ██    ██ ██   ██ ████   ██ ██     ",
+    "██ ██  ██ ██    ██ ██         ██    ██    ██ ██████  ██ ██  ██ █████  ",
+    "██  ██ ██ ██    ██ ██         ██    ██    ██ ██   ██ ██  ██ ██ ██     ",
+    "██   ████  ██████   ██████    ██     ██████  ██   ██ ██   ████ ███████",
+]
 
-[items.system_info]
+[menu.install]
+type = "submenu"
+name = "Installation"
+description = "Install Nocturne components"
+
+[menu.install.compositor]
+type = "action"
+name = "Install Compositor"
+description = "Install the Nocturne window compositor"
+command = "echo 'Installing compositor...'"
+
+[menu.install.browser]
+type = "selector"
+name = "Select Browser to Install"
+description = "Choose which browser to install"
+options = ["firefox", "chromium:Open source chromium", "brave", "opera", "zen", "vivaldi", "chrome:Google chrome"]
+default = "firefox"
+variable = "BROWSER"
+
+[menu.install.packages]
+type = "multiple_selection"
+name = "Select Additional Packages"
+description = "Choose optional packages to install"
+options = ["git", "vim", "neovim:Advanced vim-based editor", "zsh", "tmux:Terminal multiplexer", "curl", "wget:HTTP retrieval tool"]
+install_key = "PACKAGES"
+
+[menu.install.install_packages]
+type = "action"
+name = "Install Selected Packages"
+description = "Install the chosen additional packages"
+command = "echo 'Installing packages...'; for pkg in ${PACKAGES}; do echo 'Installing $pkg...'; sudo pacman -S $pkg; done"
+
+[menu.install.install_browser]
+type = "action"
+name = "Install Selected Browser"
+description = "Install the chosen browser"
+command = "echo 'Installing ${BROWSER}...'; sudo pacman -S ${BROWSER}"
+
+[menu.install.theme]
+type = "action"
+name = "Install Themes"
+description = "Install Nocturne theme packages"
+command = "echo 'Installing themes...'"
+
+[menu.configuration]
+type = "submenu"
+name = "Configuration"
+description = "Configure Nocturne settings"
+
+[menu.configuration.theme_selector]
+type = "selector"
+name = "Select Theme"
+description = "Choose your desktop theme"
+options = ["dark", "light", "nocturne", "purple", "blue"]
+default = "nocturne"
+variable = "THEME"
+
+[menu.configuration.apply_theme]
+type = "action"
+name = "Apply Selected Theme"
+description = "Apply the chosen theme"
+command = "echo 'Applying ${THEME} theme...'; nocturne-theme set ${THEME}"
+
+[menu.configuration.keybinds]
+type = "action"
+name = "Key Bindings"
+description = "Configure keyboard shortcuts"
+command = "echo 'Configuring keybinds...'"
+
+[menu.system]
 type = "submenu"
 name = "System Info"
-description = "View system information and status"
-items = ["cpu_info", "memory_usage", "disk_usage"]
+description = "View system information"
 
-[items.cpu_info]
+[menu.system.cpu]
 type = "action"
 name = "CPU Info"
 description = "Display CPU information"
 command = "lscpu"
 
-[items.memory_usage]
+[menu.system.memory]
 type = "action"
 name = "Memory Usage"
 description = "Show memory usage statistics"
 command = "free -h"
 
-[items.disk_usage]
+[menu.system.disk]
 type = "action"
 name = "Disk Usage"
 description = "Display disk space usage"
 command = "df -h"
 
-[items.network_tools]
+[menu.network]
 type = "submenu"
 name = "Network Tools"
 description = "Network diagnostics and monitoring"
-items = ["net_interfaces", "ping_tests"]
 
-[items.net_interfaces]
+[menu.network.interfaces]
 type = "action"
 name = "Network Interfaces"
 description = "Show network interface configuration"
 command = "ip addr show"
 
-[items.ping_tests]
+[menu.network.ping]
 type = "submenu"
 name = "Ping Tests"
 description = "Network connectivity tests"
-items = ["ping_google", "ping_gateway"]
 
-[items.ping_google]
+[menu.network.ping.google]
 type = "action"
 name = "Ping Google"
 description = "Test connectivity to Google DNS"
 command = "ping -c 4 8.8.8.8"
 
-[items.ping_gateway]
+[menu.network.ping.gateway]
 type = "action"
-name = "Ping Local Gateway"
+name = "Ping Gateway"
 description = "Test connectivity to local gateway"
 command = "ping -c 4 $(ip route | grep default | awk '{print $3}' | head -1)"
-
-[items.process_mgmt]
-type = "submenu"
-name = "Process Management"
-description = "View and manage running processes"
-items = ["top_processes", "memory_by_process", "test1", "test2"]
-
-[items.top_processes]
-type = "action"
-name = "Top Processes"
-description = "Show top CPU consuming processes"
-command = "ps aux --sort=-%cpu"
-
-[items.test1]
-type = "action"
-name = "Test item 1"
-description = "Just a test item"
-command = "sudo ls -la /home/adary"
-
-[items.test2]
-type = "action"
-name = "Test item 2"
-description = "Testing a script"
-command = "$HOME/scripts/test_script.sh"
-
-[items.memory_by_process]
-type = "action"
-name = "Memory Usage by Process"
-description = "Show processes sorted by memory usage"
-command = "ps aux --sort=-%mem"
-
-[items.quick_actions]
-type = "submenu"
-name = "Quick Actions"
-description = "Common system administration tasks"
-items = ["system_update", "clear_cache"]
-
-[items.system_update]
-type = "action"
-name = "System Update"
-description = "Update system packages (requires sudo)"
-command = "sudo pacman -Syu"
-
-[items.clear_cache]
-type = "action"
-name = "Clear Cache"
-description = "Clear package cache"
-command = "sudo pacman -Sc"

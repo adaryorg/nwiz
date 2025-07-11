@@ -1,5 +1,6 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
+const theme = @import("theme.zig");
 
 pub const ExecutionResult = struct {
     success: bool,
@@ -274,17 +275,24 @@ pub const AsyncOutputViewer = struct {
     allocator: std.mem.Allocator,
     command_was_running: bool = false,
     command: []const u8,
+    theme: *const theme.Theme,
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8) Self {
+    pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, app_theme: *const theme.Theme) Self {
         return Self{
             .async_executor = async_executor,
             .allocator = allocator,
             .auto_scroll = async_executor.isRunning(), // Only auto-scroll if command is running
             .command_was_running = async_executor.isRunning(),
             .command = command,
+            .theme = app_theme,
         };
+    }
+
+    pub fn deinit(self: *Self) void {
+        // Free the command string that was allocated in main.zig
+        self.allocator.free(self.command);
     }
 
     pub fn updateContent(self: *Self) void {
@@ -326,7 +334,7 @@ pub const AsyncOutputViewer = struct {
         
         win.clear();
 
-        const border_style = vaxis.Style{ .fg = .{ .index = 7 } };
+        const border_style = vaxis.Style{ .fg = self.theme.border.toVaxisColor() };
         const output_win = win.child(.{
             .border = .{
                 .where = .all,
@@ -370,18 +378,9 @@ pub const AsyncOutputViewer = struct {
         else 
             0;
 
-        // Nocturne gradient colors
-        const nocturne_colors = [_]vaxis.Color{
-            .{ .rgb = .{ 0x80, 0x50, 0xcd } }, // nocturne1: #8050cd
-            .{ .rgb = .{ 0x8e, 0x63, 0xd3 } }, // nocturne2: #8e63d3
-            .{ .rgb = .{ 0x9b, 0x76, 0xd8 } }, // nocturne3: #9b76d8
-            .{ .rgb = .{ 0xa9, 0x89, 0xde } }, // nocturne4: #a989de
-            .{ .rgb = .{ 0xb7, 0x9d, 0xe3 } }, // nocturne5: #b79de3
-        };
-
-        // Draw ASCII art header
+        // Draw ASCII art header with theme colors
         for (ascii_lines, 0..) |line, i| {
-            const color = nocturne_colors[i % nocturne_colors.len];
+            const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColor();
             const ascii_win = inner_win.child(.{
                 .x_off = @intCast(center_x),
                 .y_off = @intCast(row),
@@ -398,7 +397,7 @@ pub const AsyncOutputViewer = struct {
 
         // Add title with command and status indicator
         const title_style = vaxis.Style{ 
-            .fg = .{ .rgb = .{ 0xb7, 0x9d, 0xe3 } },
+            .fg = self.theme.menu_header.toVaxisColor(),
             .bold = true 
         };
         
@@ -444,7 +443,7 @@ pub const AsyncOutputViewer = struct {
         const output_to_display = if (output_text.len > 0) output_text else "Waiting for output...";
         
         // Split output into lines and handle word wrapping
-        const output_style = vaxis.Style{ .fg = .{ .index = 15 } };
+        const output_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
         
         var wrapped_lines = std.ArrayList([]const u8).init(std.heap.page_allocator);
         defer wrapped_lines.deinit();
@@ -542,7 +541,7 @@ pub const AsyncOutputViewer = struct {
         const error_output = self.async_executor.getErrorOutput();
         if (error_output.len > 0 and display_row < inner_win.height -| 2) {
             display_row += 1; // Add some spacing
-            const error_header_style = vaxis.Style{ .fg = .{ .index = 1 }, .bold = true };
+            const error_header_style = vaxis.Style{ .fg = .{ .index = 1 }, .bold = true }; // Keep red for errors
             const error_header_segment = vaxis.Segment{
                 .text = "Errors:",
                 .style = error_header_style,
@@ -550,7 +549,7 @@ pub const AsyncOutputViewer = struct {
             _ = inner_win.printSegment(error_header_segment, .{ .row_offset = @intCast(display_row) });
             display_row += 1;
 
-            const error_style = vaxis.Style{ .fg = .{ .index = 1 } };
+            const error_style = vaxis.Style{ .fg = .{ .index = 1 } }; // Keep red for errors
             const error_text = if (error_output.len > 200) 
                 error_output[0..200] 
             else 
@@ -565,7 +564,7 @@ pub const AsyncOutputViewer = struct {
 
         // Footer with enhanced help text
         const help_row = output_win.height -| 1;
-        const help_style = vaxis.Style{ .fg = .{ .index = 8 } };
+        const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColor() };
         
         const help_text = if (self.async_executor.isRunning())
             "↑/↓: Scroll | PgUp/PgDn: Page | Ctrl+C: Kill command | Esc: Back to menu"
@@ -593,8 +592,8 @@ pub const AsyncOutputViewer = struct {
         else 
             0;
         
-        const scrollbar_style = vaxis.Style{ .fg = .{ .index = 8 } }; // Dark gray
-        const thumb_style = vaxis.Style{ .fg = .{ .index = 15 } }; // White
+        const scrollbar_style = vaxis.Style{ .fg = self.theme.dark_grey.toVaxisColor() };
+        const thumb_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
         
         // Draw scrollbar track
         var i: usize = 0;
@@ -730,7 +729,7 @@ pub const OutputViewer = struct {
     pub fn render(self: *Self, win: vaxis.Window) void {
         win.clear();
 
-        const border_style = vaxis.Style{ .fg = .{ .index = 7 } };
+        const border_style = vaxis.Style{ .fg = self.theme.border.toVaxisColor() };
         const output_win = win.child(.{
             .border = .{
                 .where = .all,
@@ -774,18 +773,9 @@ pub const OutputViewer = struct {
         else 
             0;
 
-        // Nocturne gradient colors
-        const nocturne_colors = [_]vaxis.Color{
-            .{ .rgb = .{ 0x80, 0x50, 0xcd } }, // nocturne1: #8050cd
-            .{ .rgb = .{ 0x8e, 0x63, 0xd3 } }, // nocturne2: #8e63d3
-            .{ .rgb = .{ 0x9b, 0x76, 0xd8 } }, // nocturne3: #9b76d8
-            .{ .rgb = .{ 0xa9, 0x89, 0xde } }, // nocturne4: #a989de
-            .{ .rgb = .{ 0xb7, 0x9d, 0xe3 } }, // nocturne5: #b79de3
-        };
-
-        // Draw ASCII art header
+        // Draw ASCII art header with theme colors
         for (ascii_lines, 0..) |line, i| {
-            const color = nocturne_colors[i % nocturne_colors.len];
+            const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColor();
             const ascii_win = inner_win.child(.{
                 .x_off = @intCast(center_x),
                 .y_off = @intCast(row),
@@ -802,7 +792,7 @@ pub const OutputViewer = struct {
 
         // Add command title with status
         const title_style = vaxis.Style{ 
-            .fg = .{ .rgb = .{ 0xb7, 0x9d, 0xe3 } },
+            .fg = self.theme.menu_header.toVaxisColor(),
             .bold = true 
         };
         
@@ -841,7 +831,7 @@ pub const OutputViewer = struct {
         const output_text = if (self.result.output.len > 0) self.result.output else "No output";
         
         // Split output into lines and handle word wrapping
-        const output_style = vaxis.Style{ .fg = .{ .index = 15 } };
+        const output_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
         
         var wrapped_lines = std.ArrayList([]const u8).init(std.heap.page_allocator);
         defer wrapped_lines.deinit();
@@ -919,7 +909,7 @@ pub const OutputViewer = struct {
         // Display errors after the output if any exist
         if (self.result.error_output.len > 0 and display_row < inner_win.height -| 2) {
             display_row += 1; // Add some spacing
-            const error_header_style = vaxis.Style{ .fg = .{ .index = 1 }, .bold = true };
+            const error_header_style = vaxis.Style{ .fg = .{ .index = 1 }, .bold = true }; // Keep red for errors
             const error_header_segment = vaxis.Segment{
                 .text = "Errors:",
                 .style = error_header_style,
@@ -927,7 +917,7 @@ pub const OutputViewer = struct {
             _ = inner_win.printSegment(error_header_segment, .{ .row_offset = @intCast(display_row) });
             display_row += 1;
 
-            const error_style = vaxis.Style{ .fg = .{ .index = 1 } };
+            const error_style = vaxis.Style{ .fg = .{ .index = 1 } }; // Keep red for errors
             const error_text = if (self.result.error_output.len > 200) 
                 self.result.error_output[0..200] 
             else 
@@ -941,7 +931,7 @@ pub const OutputViewer = struct {
         }
 
         const help_row = output_win.height -| 1;
-        const help_style = vaxis.Style{ .fg = .{ .index = 8 } };
+        const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColor() };
         const help_segment = vaxis.Segment{
             .text = "↑/↓: Scroll | PgUp/PgDn: Page | Esc: Back to menu",
             .style = help_style,
@@ -963,8 +953,8 @@ pub const OutputViewer = struct {
         else 
             0;
         
-        const scrollbar_style = vaxis.Style{ .fg = .{ .index = 8 } }; // Dark gray
-        const thumb_style = vaxis.Style{ .fg = .{ .index = 15 } }; // White
+        const scrollbar_style = vaxis.Style{ .fg = self.theme.dark_grey.toVaxisColor() };
+        const thumb_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
         
         // Draw scrollbar track
         var i: usize = 0;

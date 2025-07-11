@@ -3,6 +3,9 @@ const vaxis = @import("vaxis");
 const menu = @import("menu.zig");
 const config = @import("config.zig");
 const executor = @import("executor.zig");
+const theme = @import("theme.zig");
+const install = @import("install.zig");
+const sudo = @import("sudo.zig");
 
 // Global variables for cleanup
 var global_tty: ?*vaxis.Tty = null;
@@ -24,34 +27,6 @@ pub fn panic(message: []const u8, stack_trace: ?*std.builtin.StackTrace, ret_add
     std.debug.print("PANIC: {s}\n", .{message});
     std.process.exit(1);
 }
-
-const Event = union(enum) {
-    key_press: vaxis.Key,
-    winsize: vaxis.Winsize,
-    foo: u8,
-};
-
-const AppState = enum {
-    menu,
-    viewing_output,
-};
-
-// Global shutdown state
-var shutdown_requested: bool = false;
-var shutdown_mutex: std.Thread.Mutex = .{};
-
-fn requestShutdown() void {
-    shutdown_mutex.lock();
-    defer shutdown_mutex.unlock();
-    shutdown_requested = true;
-}
-
-fn shouldShutdown() bool {
-    shutdown_mutex.lock();
-    defer shutdown_mutex.unlock();
-    return shutdown_requested;
-}
-
 
 // Terminal restoration function
 fn restoreTerminalCompletely() void {
@@ -80,10 +55,6 @@ fn restoreTerminalCompletely() void {
         // Reset terminal modes
         writer.writeAll("\x1b[?7h") catch {};    // Enable line wrapping
         writer.writeAll("\x1b[?12l") catch {};   // Disable cursor blinking (if it was disabled)
-        
-        // Restore original terminal attributes if available
-        // Note: vaxis handles terminal restoration through its deinit
-        // This additional restoration ensures complete cleanup
     }
 }
 
@@ -99,87 +70,75 @@ fn signalHandler(sig: c_int) callconv(.C) void {
     }
     restoreTerminalCompletely();
     
-    requestShutdown();
+    sudo.requestShutdown();
 }
 
-const SudoManager = struct {
-    authenticated: bool = false,
-    last_auth_time: i64 = 0,
-    reauth_count: u32 = 0,
-    mutex: std.Thread.Mutex = .{},
-    should_stop: bool = false,
-    
-    const Self = @This();
-    
-    fn authenticate(self: *Self, allocator: std.mem.Allocator) !bool {
-        const result = try std.process.Child.run(.{
-            .allocator = allocator,
-            .argv = &[_][]const u8{ "sudo", "-v" },
-        });
-        defer allocator.free(result.stdout);
-        defer allocator.free(result.stderr);
-        
-        if (result.term == .Exited and result.term.Exited == 0) {
-            self.mutex.lock();
-            defer self.mutex.unlock();
-            self.authenticated = true;
-            self.last_auth_time = std.time.timestamp();
-            return true;
-        }
-        return false;
-    }
-    
-    fn needsReauth(self: *Self) bool {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        const current_time = std.time.timestamp();
-        return (current_time - self.last_auth_time) >= 30; // 30 seconds
-    }
-    
-    fn reauth(self: *Self, allocator: std.mem.Allocator) !void {
-        if (self.needsReauth()) {
-            if (try self.authenticate(allocator)) {
-                self.mutex.lock();
-                defer self.mutex.unlock();
-                self.reauth_count += 1;
-            }
-        }
-    }
-    
-    fn getStatus(self: *Self) struct { authenticated: bool, reauth_count: u32 } {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        return .{ .authenticated = self.authenticated, .reauth_count = self.reauth_count };
-    }
-    
-    fn stop(self: *Self) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        self.should_stop = true;
-    }
-    
-    fn shouldStop(self: *Self) bool {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        return self.should_stop;
-    }
-    
-    fn renewalThreadFn(sudo_mgr: *SudoManager, allocator: std.mem.Allocator) void {
-        while (!sudo_mgr.shouldStop() and !shouldShutdown()) {
-            sudo_mgr.reauth(allocator) catch {};
-            
-            // Sleep for 15 seconds before checking again, but check for shutdown every second
-            var sleep_count: u8 = 0;
-            while (sleep_count < 15 and !shouldShutdown()) {
-                std.time.sleep(1 * std.time.ns_per_s);
-                sleep_count += 1;
-            }
-        }
-    }
+
+const Event = union(enum) {
+    key_press: vaxis.Key,
+    winsize: vaxis.Winsize,
+    foo: u8,
 };
 
+const AppState = enum {
+    menu,
+    viewing_output,
+};
+
+// Check if the configuration directory and files exist
+fn checkConfigurationBootstrap(allocator: std.mem.Allocator) !struct { menu_path: []const u8, theme_path: []const u8, install_path: []const u8 } {
+    const home_dir = std.posix.getenv("HOME") orelse {
+        std.debug.print("Error: HOME environment variable not set\n", .{});
+        return error.HomeNotFound;
+    };
+    
+    // Build the config directory path
+    const config_dir = try std.fmt.allocPrint(allocator, "{s}/.config/nocturne", .{home_dir});
+    defer allocator.free(config_dir);
+    
+    // Check if config directory exists
+    std.fs.cwd().access(config_dir, .{}) catch {
+        std.debug.print("Error: Configuration directory does not exist: {s}\n", .{config_dir});
+        std.debug.print("Please ensure Nocturne is properly installed and configured.\n", .{});
+        return error.ConfigDirNotFound;
+    };
+    
+    // Build the menu.toml path
+    const menu_toml_path = try std.fmt.allocPrint(allocator, "{s}/menu.toml", .{config_dir});
+    
+    // Check if menu.toml exists
+    std.fs.cwd().access(menu_toml_path, .{}) catch {
+        allocator.free(menu_toml_path);
+        std.debug.print("Error: Menu configuration file does not exist: {s}/menu.toml\n", .{config_dir});
+        std.debug.print("Please ensure Nocturne is properly installed and configured.\n", .{});
+        return error.MenuConfigNotFound;
+    };
+    
+    // Build the theme.toml path
+    const theme_toml_path = try std.fmt.allocPrint(allocator, "{s}/theme.toml", .{config_dir});
+    
+    // Check if theme.toml exists (not required, will use defaults if missing)
+    std.fs.cwd().access(theme_toml_path, .{}) catch {
+        std.debug.print("Warning: Theme configuration file not found: {s}/theme.toml\n", .{config_dir});
+        std.debug.print("Using default theme colors.\n", .{});
+        // Don't return error, just continue with defaults
+    };
+    
+    // Build the install.toml path
+    const install_toml_path = try std.fmt.allocPrint(allocator, "{s}/install.toml", .{config_dir});
+    
+    // Check if install.toml exists (not required, will be created if missing)
+    std.fs.cwd().access(install_toml_path, .{}) catch {
+        std.debug.print("Info: Install configuration file not found: {s}/install.toml\n", .{config_dir});
+        std.debug.print("Will be created when selections are made.\n", .{});
+        // Don't return error, just continue - file will be created when needed
+    };
+    
+    return .{ .menu_path = menu_toml_path, .theme_path = theme_toml_path, .install_path = install_toml_path };
+}
+
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){}; 
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -192,22 +151,61 @@ pub fn main() !void {
     _ = std.posix.sigaction(std.posix.SIG.INT, &sig_action, null);
     _ = std.posix.sigaction(std.posix.SIG.TERM, &sig_action, null);
 
-    // Initialize sudo manager and authenticate BEFORE TUI
-    var sudo_mgr = SudoManager{};
-    
-    // Request sudo authentication upfront in normal terminal
-    std.debug.print("Nocturne TUI requires sudo access for system commands.\n", .{});
-    if (!try sudo_mgr.authenticate(allocator)) {
-        std.debug.print("Failed to authenticate with sudo. Some features may be limited.\n", .{});
-    } else {
-        std.debug.print("Sudo authenticated successfully! Starting TUI...\n", .{});
+    // Authenticate sudo BEFORE TUI initialization
+    const auth_success = try sudo.authenticateInitial();
+    if (!auth_success) {
+        return; // Exit if sudo authentication fails
     }
-    
-    // Small delay to let user read the message
-    std.time.sleep(1 * std.time.ns_per_s);
 
-    // Initialize vaxis
-    var tty = try vaxis.Tty.init();
+    // Check configuration bootstrap after sudo authentication
+    const config_paths = checkConfigurationBootstrap(allocator) catch |err| {
+        switch (err) {
+            error.HomeNotFound, error.ConfigDirNotFound, error.MenuConfigNotFound => return,
+            else => return err,
+        }
+    };
+    defer allocator.free(config_paths.menu_path);
+    defer allocator.free(config_paths.theme_path);
+    defer allocator.free(config_paths.install_path);
+
+    // Load menu configuration
+    var menu_config = config.loadMenuConfig(allocator, config_paths.menu_path) catch |err| {
+        switch (err) {
+            error.AsciiArtTooTall => {
+                // Error message already printed by config loader
+                std.debug.print("Exiting...\n", .{});
+                return;
+            },
+            else => {
+                std.debug.print("Failed to load menu configuration: {}\n", .{err});
+                return err;
+            },
+        }
+    };
+    defer menu_config.deinit(allocator);
+
+    // Initialize vaxis with error handling
+    var tty = vaxis.Tty.init() catch |err| {
+        switch (err) {
+            error.Unexpected => {
+                std.debug.print("\n=== Terminal Access Error ===\n", .{});
+                std.debug.print("Error: Unable to access /dev/tty (errno: 6 - ENXIO)\n", .{});
+                std.debug.print("This typically indicates a terminal orphaning issue.\n", .{});
+                std.debug.print("\nSolutions to try:\n", .{});
+                std.debug.print("1. Run the application in a fresh terminal window\n", .{});
+                std.debug.print("2. If you recently ran sudo, restart your terminal session\n", .{});
+                std.debug.print("3. Make sure you're not running in an IDE console or subprocess\n", .{});
+                std.debug.print("4. Try running from a native terminal (xterm, gnome-terminal, etc.)\n", .{});
+                return;
+            },
+            else => {
+                std.debug.print("\n=== Terminal Initialization Error ===\n", .{});
+                std.debug.print("Error: {}\n", .{err});
+                std.debug.print("Please ensure you're running in a compatible terminal.\n", .{});
+                return err;
+            },
+        }
+    };
     global_tty = &tty;
     defer {
         global_tty = null;
@@ -232,27 +230,83 @@ pub fn main() !void {
     
     try vx.queryTerminal(tty.anyWriter(), 1 * std.time.ns_per_s);
 
-    // Load menu configuration from TOML file
-    var menu_config = try config.loadMenuConfig(allocator, "menu.toml");
-    defer menu_config.deinit(allocator);
+    // Load theme configuration from TOML file
+    var app_theme = try theme.loadTheme(allocator, config_paths.theme_path);
+    defer app_theme.deinit(allocator);
+
+    // Load install configuration from TOML file
+    var install_config = try install.loadInstallConfig(allocator, config_paths.install_path);
+    defer install_config.deinit();
 
     // Initialize menu state
     var menu_state = menu.MenuState.init(allocator, &menu_config) catch {
         return;
     };
     defer menu_state.deinit();
+    
+    // Load existing selections from install.toml into menu state
+    var install_iter = install_config.selections.iterator();
+    while (install_iter.next()) |entry| {
+        const variable_name = entry.key_ptr.*;
+        const value = entry.value_ptr.*;
+        
+        switch (value) {
+            .single => |val| {
+                // Find selector items with matching variable_name and set their values
+                var menu_iter = menu_config.items.iterator();
+                while (menu_iter.next()) |menu_entry| {
+                    const item = menu_entry.value_ptr;
+                    if (item.type == .selector and item.variable_name != null) {
+                        if (std.mem.eql(u8, item.variable_name.?, variable_name)) {
+                            menu_state.selector_values.put(item.id, try allocator.dupe(u8, val)) catch {};
+                        }
+                    }
+                }
+            },
+            .multiple => |vals| {
+                // Find multiple selection items with matching install_key and set their values
+                var menu_iter = menu_config.items.iterator();
+                while (menu_iter.next()) |menu_entry| {
+                    const item = menu_entry.value_ptr;
+                    if (item.type == .multiple_selection and item.install_key != null) {
+                        if (std.mem.eql(u8, item.install_key.?, variable_name)) {
+                            // Clear existing selections and set new ones
+                            if (menu_state.multiple_selection_values.getPtr(item.id)) |existing_list| {
+                                for (existing_list.items) |existing_val| {
+                                    allocator.free(existing_val);
+                                }
+                                existing_list.clearAndFree();
+                            } else {
+                                const item_id_key = try allocator.dupe(u8, item.id);
+                                const new_list = std.ArrayList([]const u8).init(allocator);
+                                try menu_state.multiple_selection_values.put(item_id_key, new_list);
+                            }
+                            
+                            // Add all the loaded values
+                            if (menu_state.multiple_selection_values.getPtr(item.id)) |selection_list| {
+                                for (vals) |val| {
+                                    const val_copy = try allocator.dupe(u8, val);
+                                    try selection_list.append(val_copy);
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        }
+    }
 
     // Initialize menu renderer
-    var menu_renderer = menu.MenuRenderer{};
+    var menu_renderer = menu.MenuRenderer{ .theme = &app_theme };
 
     // Initialize async command executor
     var async_command_executor = executor.AsyncCommandExecutor.init(allocator);
     defer async_command_executor.deinit();
 
-    // Start background authentication renewal thread (sudo_mgr was initialized before TUI)
-    const renewal_thread = try std.Thread.spawn(.{}, SudoManager.renewalThreadFn, .{ &sudo_mgr, allocator });
+    // Start background thread to maintain sudo authentication
+    const renewal_thread = try sudo.startBackgroundRenewal();
     defer {
-        sudo_mgr.stop();
+        sudo.requestShutdown();
         renewal_thread.join();
     }
 
@@ -261,51 +315,152 @@ pub fn main() !void {
     var async_output_viewer: ?executor.AsyncOutputViewer = null;
 
     // Main event loop
-    while (!shouldShutdown()) {
+    while (!sudo.shouldShutdown()) {
         // Check for events with timeout
         while (loop.tryEvent()) |event| {
             switch (event) {
                 .key_press => |key| {
                     if (key.codepoint == 'c' and key.mods.ctrl) {
-                        requestShutdown();
+                        sudo.requestShutdown();
                         break;
                     }
                     if (key.codepoint == 'q') {
-                        requestShutdown();
+                        sudo.requestShutdown();
                         break;
                     }
 
                     switch (app_state) {
                         .menu => {
-                            if (key.matches(vaxis.Key.up, .{})) {
-                                menu_state.navigateUp();
-                            } else if (key.matches(vaxis.Key.down, .{})) {
-                                menu_state.navigateDown();
-                            } else if (key.matches(vaxis.Key.enter, .{})) {
-                                // Safety check: ensure we have items and valid selection
-                                if (menu_state.current_items.len == 0) {
-                                    continue;
-                                }
-                                if (menu_state.selected_index >= menu_state.current_items.len) {
-                                    menu_state.selected_index = 0;
-                                    continue;
-                                }
-                                
-                                if (menu_state.getCurrentAction()) |command| {
-                                    // Start async command execution
-                                    async_command_executor.startCommand(command) catch |err| {
-                                        std.debug.print("Failed to start command: {}\n", .{err});
-                                        continue;
+                            if (menu_state.in_multiple_selection_mode) {
+                                // Handle multiple selection mode navigation
+                                if (key.matches(vaxis.Key.up, .{})) {
+                                    menu_state.navigateMultipleSelectionUp();
+                                } else if (key.matches(vaxis.Key.down, .{})) {
+                                    menu_state.navigateMultipleSelectionDown();
+                                } else if (key.matches(vaxis.Key.space, .{})) {
+                                    menu_state.toggleMultipleSelectionOption() catch |err| {
+                                        std.debug.print("Failed to toggle option: {}\n", .{err});
                                     };
-                                    async_output_viewer = executor.AsyncOutputViewer.init(allocator, &async_command_executor, command);
-                                    app_state = .viewing_output;
-                                } else {
-                                    const entered = menu_state.enterSubmenu() catch false;
-                                    _ = entered;
+                                } else if (key.matches(vaxis.Key.enter, .{})) {
+                                    menu_state.exitMultipleSelectionMode();
+                                    
+                                    // Save to install.toml if multiple selection has install_key
+                                    if (menu_state.selected_index < menu_state.current_items.len) {
+                                        const current_item = &menu_state.current_items[menu_state.selected_index];
+                                        if (current_item.type == .multiple_selection and current_item.install_key != null) {
+                                            const selected_values = menu_state.getMultipleSelectionValues(current_item);
+                                            
+                                            // Convert install key to lowercase
+                                            var lowercase_key = try allocator.alloc(u8, current_item.install_key.?.len);
+                                            defer allocator.free(lowercase_key);
+                                            for (current_item.install_key.?, 0..) |c, i| {
+                                                lowercase_key[i] = std.ascii.toLower(c);
+                                            }
+                                            
+                                            install_config.setMultipleSelection(lowercase_key, selected_values) catch |err| {
+                                                std.debug.print("Failed to save multiple selection: {}\n", .{err});
+                                            };
+                                            install.saveInstallConfig(&install_config, config_paths.install_path) catch |err| {
+                                                std.debug.print("Failed to save install config: {}\n", .{err});
+                                            };
+                                        }
+                                    }
+                                } else if (key.matches(vaxis.Key.escape, .{})) {
+                                    menu_state.exitMultipleSelectionMode();
                                 }
-                            } else if (key.matches(vaxis.Key.escape, .{})) {
-                                // Only go back if we're in a submenu, do nothing at top level
-                                _ = menu_state.goBack() catch false;
+                            } else if (menu_state.in_selector_mode) {
+                                // Handle selector mode navigation
+                                if (key.matches(vaxis.Key.up, .{})) {
+                                    menu_state.navigateSelectorUp();
+                                } else if (key.matches(vaxis.Key.down, .{})) {
+                                    menu_state.navigateSelectorDown();
+                                } else if (key.matches(vaxis.Key.enter, .{})) {
+                                    menu_state.selectSelectorOption() catch |err| {
+                                        std.debug.print("Failed to select option: {}\n", .{err});
+                                    };
+                                    
+                                    // Save to install.toml if selector has variable_name
+                                    if (menu_state.selected_index < menu_state.current_items.len) {
+                                        const current_item = &menu_state.current_items[menu_state.selected_index];
+                                        if (current_item.type == .selector and current_item.variable_name != null) {
+                                            if (menu_state.getSelectorValue(current_item)) |selected_value| {
+                                                // Convert variable name to lowercase
+                                                var lowercase_var_name = try allocator.alloc(u8, current_item.variable_name.?.len);
+                                                defer allocator.free(lowercase_var_name);
+                                                for (current_item.variable_name.?, 0..) |c, i| {
+                                                    lowercase_var_name[i] = std.ascii.toLower(c);
+                                                }
+                                                
+                                                install_config.setSingleSelection(lowercase_var_name, selected_value) catch |err| {
+                                                    std.debug.print("Failed to save selection: {}\n", .{err});
+                                                };
+                                                install.saveInstallConfig(&install_config, config_paths.install_path) catch |err| {
+                                                    std.debug.print("Failed to save install config: {}\n", .{err});
+                                                };
+                                            }
+                                        }
+                                    }
+                                } else if (key.matches(vaxis.Key.escape, .{})) {
+                                    menu_state.exitSelectorMode();
+                                }
+                            } else {
+                                // Handle normal menu navigation
+                                if (key.matches(vaxis.Key.up, .{})) {
+                                    menu_state.navigateUp();
+                                } else if (key.matches(vaxis.Key.down, .{})) {
+                                    menu_state.navigateDown();
+                                } else if (key.matches(vaxis.Key.enter, .{})) {
+                                    // Safety check: ensure we have items and valid selection
+                                    if (menu_state.current_items.len == 0) {
+                                        continue;
+                                    }
+                                    if (menu_state.selected_index >= menu_state.current_items.len) {
+                                        menu_state.selected_index = 0;
+                                        continue;
+                                    }
+                                    
+                                    const current_item = &menu_state.current_items[menu_state.selected_index];
+                                    
+                                    // Check if this is a selector item
+                                    if (current_item.type == .selector) {
+                                        _ = menu_state.enterSelectorMode();
+                                    } else if (current_item.type == .multiple_selection) {
+                                        _ = menu_state.enterMultipleSelectionMode();
+                                    } else if (menu_state.getCurrentActionWithSubstitution() catch null) |command| {
+                                        // Start async command execution with variable substitution
+                                        defer allocator.free(command); // Free the allocated command string
+                                        const command_copy = try allocator.dupe(u8, command);
+                                        async_command_executor.startCommand(command) catch |err| {
+                                            allocator.free(command_copy);
+                                            std.debug.print("Failed to start command: {}\n", .{err});
+                                            continue;
+                                        };
+                                        async_output_viewer = executor.AsyncOutputViewer.init(allocator, &async_command_executor, command_copy, &app_theme);
+                                        app_state = .viewing_output;
+                                    } else {
+                                        const entered = menu_state.enterSubmenu() catch false;
+                                        _ = entered;
+                                    }
+                                } else if (key.matches(vaxis.Key.escape, .{})) {
+                                    // Only go back if we're in a submenu, do nothing at top level
+                                    _ = menu_state.goBack() catch false;
+                                } else if (key.matches(vaxis.Key.left, .{})) {
+                                    // Left arrow also goes back for intuitive navigation
+                                    _ = menu_state.goBack() catch false;
+                                } else if (key.matches(vaxis.Key.right, .{})) {
+                                    // Right arrow enters submenu for intuitive navigation
+                                    if (menu_state.current_items.len > 0 and menu_state.selected_index < menu_state.current_items.len) {
+                                        const current_item = &menu_state.current_items[menu_state.selected_index];
+                                        if (current_item.type == .selector) {
+                                            _ = menu_state.enterSelectorMode();
+                                        } else if (current_item.type == .multiple_selection) {
+                                            _ = menu_state.enterMultipleSelectionMode();
+                                        } else {
+                                            const entered = menu_state.enterSubmenu() catch false;
+                                            _ = entered;
+                                        }
+                                    }
+                                }
                             }
                         },
                         .viewing_output => {
@@ -327,6 +482,9 @@ pub fn main() !void {
                                 } else if (key.matches(vaxis.Key.escape, .{})) {
                                     // Clean up command if still running
                                     async_command_executor.cleanup();
+                                    if (async_output_viewer) |*output_viewer| {
+                                        output_viewer.deinit();
+                                    }
                                     async_output_viewer = null;
                                     app_state = .menu;
                                 } else if (key.codepoint == 'c' and key.mods.ctrl) {
@@ -335,7 +493,7 @@ pub fn main() !void {
                                         viewer.killCommand();
                                     } else {
                                         // If command is not running, Ctrl+C exits the app
-                                        requestShutdown();
+                                        sudo.requestShutdown();
                                         break;
                                     }
                                 }
@@ -351,11 +509,9 @@ pub fn main() !void {
         }
         
         // Check for shutdown after processing events
-        if (shouldShutdown()) {
+        if (sudo.shouldShutdown()) {
             break;
         }
-
-        // No blocking command execution needed - everything is async now
 
         // Render the interface
         const win = vx.window();
@@ -378,6 +534,11 @@ pub fn main() !void {
         std.time.sleep(25 * std.time.ns_per_ms); // 25ms for very responsive real-time output
     }
 
+    // Clean up async output viewer if active
+    if (async_output_viewer) |*output_viewer| {
+        output_viewer.deinit();
+    }
+    
     // Clean up async command executor (already handled by defer)
     // Comprehensive terminal restoration on normal exit
     restoreTerminalCompletely();
