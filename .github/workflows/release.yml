@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    branches: [ release ]
+    tags: [ 'v*' ]
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for git describe and version info
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.14.1
+
+    - name: Build project
+      run: zig build
+
+    - name: Test binary
+      run: |
+        ./zig-out/bin/nocturne --version
+        ./zig-out/bin/nocturne --help
+
+    - name: Get version from git tag or generate from commit
+      id: version
+      run: |
+        if git describe --tags --exact-match HEAD 2>/dev/null; then
+          VERSION=$(git describe --tags --exact-match HEAD)
+        else
+          VERSION="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: "Nocturne ${{ steps.version.outputs.version }}"
+        files: zig-out/bin/nocturne
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## Nocturne TUI ${{ steps.version.outputs.version }}
+          
+          Linux binary for the Nocturne desktop environment management tool.
+          
+          ### Installation
+          ```bash
+          chmod +x nocturne
+          sudo mv nocturne /usr/local/bin/
+          ```
+          
+          ### Usage
+          ```bash
+          nocturne --help
+          ```
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
