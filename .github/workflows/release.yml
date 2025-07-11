@@ -2,7 +2,6 @@ name: Release
 
 on:
   push:
-    branches: [ release ]
     tags: [ 'v*' ]
 
 permissions:
@@ -32,14 +31,10 @@ jobs:
         ./zig-out/bin/nocturne --version
         ./zig-out/bin/nocturne --help
 
-    - name: Get version from git tag or generate from commit
+    - name: Get version from git tag
       id: version
       run: |
-        if git describe --tags --exact-match HEAD 2>/dev/null; then
-          VERSION=$(git describe --tags --exact-match HEAD)
-        else
-          VERSION="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
-        fi
+        VERSION=${GITHUB_REF#refs/tags/}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Version: $VERSION"
 
