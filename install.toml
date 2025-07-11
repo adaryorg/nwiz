@@ -1,0 +1,6 @@
+[defaults]
+browser = "firefox"
+terminal = "ghostty"
+webapp = "brave"
+theme = "purple"
+shell = "zsh"
