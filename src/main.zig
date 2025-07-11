@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 Yuval Adar <adary@adary.org>
+// SPDX-License-Identifier: MIT
+
 const std = @import("std");
 const vaxis = @import("vaxis");
 const menu = @import("menu.zig");
