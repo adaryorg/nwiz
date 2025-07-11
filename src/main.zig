@@ -6,6 +6,7 @@ const executor = @import("executor.zig");
 const theme = @import("theme.zig");
 const install = @import("install.zig");
 const sudo = @import("sudo.zig");
+const build_options = @import("build_options");
 
 // Global variables for cleanup
 var global_tty: ?*vaxis.Tty = null;
@@ -85,6 +86,58 @@ const AppState = enum {
     viewing_output,
 };
 
+// Print version information
+fn printVersion() void {
+    std.debug.print("Nocturne TUI {s}\n", .{build_options.tag});
+    std.debug.print("Commit: {s}\n", .{build_options.commit_hash});
+    std.debug.print("Built: {s}\n", .{build_options.build_time});
+}
+
+// Application configuration from command line arguments
+const AppConfig = struct {
+    should_continue: bool = true,
+    use_sudo: bool = true,
+};
+
+// Print help information
+fn printHelp() void {
+    std.debug.print("Nocturne TUI - Terminal interface for Nocturne desktop environment\n\n", .{});
+    std.debug.print("Usage: nocturne [OPTIONS]\n\n", .{});
+    std.debug.print("Options:\n", .{});
+    std.debug.print("  -v, --version    Show version information\n", .{});
+    std.debug.print("  -h, --help       Show this help message\n", .{});
+    std.debug.print("  -n, --no-sudo    Skip sudo authentication (for testing)\n", .{});
+}
+
+// Parse command line arguments
+fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    var app_config = AppConfig{};
+
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
+            printVersion();
+            app_config.should_continue = false;
+            return app_config;
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            printHelp();
+            app_config.should_continue = false;
+            return app_config;
+        } else if (std.mem.eql(u8, arg, "--no-sudo") or std.mem.eql(u8, arg, "-n")) {
+            app_config.use_sudo = false;
+        } else {
+            std.debug.print("Unknown argument: {s}\n", .{arg});
+            std.debug.print("Use --help for usage information.\n", .{});
+            app_config.should_continue = false;
+            return app_config;
+        }
+    }
+    
+    return app_config;
+}
+
 // Check if the configuration directory and files exist
 fn checkConfigurationBootstrap(allocator: std.mem.Allocator) !struct { menu_path: []const u8, theme_path: []const u8, install_path: []const u8 } {
     const home_dir = std.posix.getenv("HOME") orelse {
@@ -142,6 +195,16 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // Parse command line arguments first
+    const app_config = parseArgs(allocator) catch |err| {
+        std.debug.print("Error parsing arguments: {}\n", .{err});
+        return;
+    };
+    
+    if (!app_config.should_continue) {
+        return; // Exit after handling --version or --help
+    }
+
     // Set up signal handlers
     const sig_action = std.posix.Sigaction{
         .handler = .{ .handler = signalHandler },
@@ -151,10 +214,14 @@ pub fn main() !void {
     _ = std.posix.sigaction(std.posix.SIG.INT, &sig_action, null);
     _ = std.posix.sigaction(std.posix.SIG.TERM, &sig_action, null);
 
-    // Authenticate sudo BEFORE TUI initialization
-    const auth_success = try sudo.authenticateInitial();
-    if (!auth_success) {
-        return; // Exit if sudo authentication fails
+    // Authenticate sudo BEFORE TUI initialization (if enabled)
+    if (app_config.use_sudo) {
+        const auth_success = try sudo.authenticateInitial();
+        if (!auth_success) {
+            return; // Exit if sudo authentication fails
+        }
+    } else {
+        std.debug.print("Running in no-sudo mode - commands requiring privileges may fail.\n", .{});
     }
 
     // Check configuration bootstrap after sudo authentication
@@ -303,11 +370,13 @@ pub fn main() !void {
     var async_command_executor = executor.AsyncCommandExecutor.init(allocator);
     defer async_command_executor.deinit();
 
-    // Start background thread to maintain sudo authentication
-    const renewal_thread = try sudo.startBackgroundRenewal();
+    // Start background thread to maintain sudo authentication (if enabled)
+    const renewal_thread = if (app_config.use_sudo) try sudo.startBackgroundRenewal() else null;
     defer {
         sudo.requestShutdown();
-        renewal_thread.join();
+        if (renewal_thread) |thread| {
+            thread.join();
+        }
     }
 
     // Application state
