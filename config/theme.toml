@@ -1,0 +1,25 @@
+[gradient]
+color1 = "#3a7b4c"
+color2 = "#4a8b5c"
+color3 = "#5a9669"
+color4 = "#6ba176"
+color5 = "#7bac83"
+color6 = "#8cb790"
+color7 = "#9cc29d"
+color8 = "#acdaaa"
+
+[colors]
+white = "#ffffff"
+light_grey = "#cccccc"
+dark_grey = "#666666"
+
+[ui]
+selected_menu_item = "color1"
+unselected_menu_item = "light_grey"
+menu_header = "color2"
+footer_text = "dark_grey"
+menu_description = "dark_grey"
+menu_item_comment = "color6"
+selector_option = "color4"
+selector_selected_option = "color4"
+border = "color6"
