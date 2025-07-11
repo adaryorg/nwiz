@@ -1,0 +1,68 @@
+Welcome to 
+    _   __           __                      
+   / | / /___  _____/ /___  ___________  ___ 
+  /  |/ / __ \/ ___/ __/ / / / ___/ __ \/ _ \
+ / /|  / /_/ / /__/ /_/ /_/ / /  / / / /  __/
+/_/ |_/\____/\___/\__/\__,_/_/  /_/ /_/\___/ 
+                                             
+
+!!! Warning !!! 
+
+!!! Proceed with Caution !!!
+
+By installing Nocturne, you're about to embark on a thrilling adventure 
+where your system will undergo some serious changes. Here's what you’re 
+signing up for:
+
+New Software: You’ll be welcoming a whole new set of applications to your 
+system. Think of it as a software party where everyone’s invited. Don’t worry, 
+we’ve vetted the guests... mostly.
+
+Defaults Changes: Your default settings are getting a makeover. Think of it 
+as a personal stylist giving your desktop a fresh new look and feel. We promise 
+it’s not a mullet.
+
+Possible Side Effects: In rare and dramatic cases, this installation may break 
+your system. It’s like a box of chocolates—you never really know what you're 
+gonna get. But hey, if things go sideways, we recommend a solid backup and a 
+sense of humor. It’s only a system, not a life.
+
+Best Experience: For optimal results, make sure you're logged into a GNOME 
+session before starting the installation. Trust us, it’ll make everything 
+smoother and less like trying to assemble IKEA furniture in the dark.
+
+!!! Disclaimer !!!
+
+By proceeding with this installation, you accept full responsibility for 
+any possible damage, system instability, or chaos caused to your machine. 
+The creator of Nocturne takes absolutely no responsibility for any unforeseen 
+consequences. If your system ends up in a digital dumpster fire, 
+remember: we warned you.
+
+If you're ready for the challenge, select 1 like a true tech adventurer. 
+Otherwise, feel free to select 2 and keep living life in the comfort zone. 
+
+The choice is yours!
+
+This is your last chance to stop the installation and backup your system. 
+You have been warned!
+
+This istaller will ask you multiple times to provide your password. This is 
+expected behavior since we can't really install software without your password.
+There will also be GNOME popups asking you to enable features. I highly recommend
+enabling them (this is something we can't really automate so...)
+
+If you are an Arch user and you don't trust AUR for software, or don't like 
+using yay as your AUR helper, this is the correct time to bail outi. 
+Nocturne uses AUR and we (major royal we here) the development team like 
+to use yay as our AUR helper so tough luck.
+
+If for any reason you don't want to use GNOME, and want to have Nocturne 
+installed for other desktop environments, please wait for the next release.
+Support for shell only installation, and other desktop environments (KDE, Cosmic,
+<your favorite linux desktop environment>) is on our roadmap. We are working hard
+to have it available soon(tm). In the meanwhile this means that you should exit 
+now (seriously) since only GNOME is supported for now.
+
+Your shell will be replaced by zsh, oh-my-zsh will be installed and configured
+for your account. If you don't like zsh for any reason, exit now.
