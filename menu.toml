@@ -131,3 +131,9 @@ type = "action"
 name = "Ping Gateway"
 description = "Test connectivity to local gateway"
 command = "ping -c 4 $(ip route | grep default | awk '{print $3}' | head -1)"
+
+[menu.about]
+type = "action"
+name = "About Nocturne"
+description = ""
+command = "cat ~/.config/nocturne/data/disclaimer"
