@@ -338,17 +338,35 @@ install_yay() {
 
     # Build and install yay
     log_info "Building and installing yay..." --terminal
+
+    # First build the package as normal user
     {
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: makepkg -si --noconfirm in $yay_dir"
-        cd "$yay_dir" && makepkg -si --noconfirm
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: makepkg --noconfirm in $yay_dir"
+        cd "$yay_dir" && makepkg --noconfirm
     } >>"$LOG_FILE" 2>&1
 
-    if [[ $? -eq 0 ]]; then
-        log_success "Yay installed successfully" --terminal
+    if [[ $? -ne 0 ]]; then
+        log_error "Failed to build yay package"
+        exit_with_error "Yay build failed. Check makepkg output in log file."
+    fi
+
+    # Install the built package with pacman
+    local yay_pkg="$yay_dir"/yay-*.pkg.tar.zst
+    if [[ -f $yay_pkg ]]; then
+        {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: sudo pacman -U --noconfirm $yay_pkg"
+            sudo pacman -U --noconfirm $yay_pkg
+        } >>"$LOG_FILE" 2>&1
+
+        if [[ $? -eq 0 ]]; then
+            log_success "Yay installed successfully" --terminal
+        else
+            log_error "Failed to install yay package"
+            exit_with_error "Yay installation failed. Check pacman output in log file."
+        fi
     else
-        log_error "Failed to build and install yay"
-        log_error "Please check makepkg output for details"
-        exit_with_error "Yay AUR helper installation failed. Check makepkg dependencies."
+        log_error "Yay package not found after build"
+        exit_with_error "Yay package file not found. Build may have failed."
     fi
 
     # Clean up
@@ -508,7 +526,10 @@ verify_installation() {
         # Add ~/.local/bin to PATH if not already there
         if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
             log_info "Adding ~/.local/bin to PATH"
-            log_info "Please run 'source ~/.bashrc' or restart your terminal"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >>"$HOME/.bashrc"
+            # Also update current PATH for this session
+            export PATH="$HOME/.local/bin:$PATH"
+            log_info "PATH updated for current session"
         fi
 
         # Test version output
@@ -540,11 +561,11 @@ authenticate_sudo() {
     if sudo -v; then
         log_info "Sudo authentication successful" --terminal
 
-        # Keep sudo alive in background
+        # Keep sudo alive in background with more frequent refresh
         {
             while true; do
-                sleep 60
-                sudo -n true
+                sleep 30 # Refresh every 30 seconds
+                sudo -n true 2>/dev/null
                 if [[ $? -ne 0 ]]; then
                     break
                 fi
@@ -591,8 +612,22 @@ main() {
     verify_installation
 
     echo
-    export PATH="$HOME/.local/bin:$PATH"
-    nocturne
+
+    # Ensure PATH is updated before running nocturne
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+    # Run nocturne
+    if command -v nocturne >/dev/null 2>&1; then
+        nocturne
+    elif [[ -x "$HOME/.local/bin/nocturne" ]]; then
+        "$HOME/.local/bin/nocturne"
+    else
+        echo "Error: Nocturne binary not found. Installation may have failed."
+        echo "Check the log file for details: $LOG_FILE"
+        exit 1
+    fi
 }
 
 # Run main function
