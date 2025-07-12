@@ -10,21 +10,37 @@ set -euo pipefail
 # Setup logging to file
 LOG_FILE="$HOME/.nocturne.log.$(date +%Y-%m-%d)"
 
-# Logging functions (now log to file)
+# Logging functions that write to both log file and optionally to terminal
 log_info() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1"
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1"
+    echo "$message" >>"$LOG_FILE"
+    if [[ "${2:-}" == "--terminal" ]]; then
+        echo "$1" >/dev/tty
+    fi
 }
 
 log_success() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] $1"
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] $1"
+    echo "$message" >>"$LOG_FILE"
+    if [[ "${2:-}" == "--terminal" ]]; then
+        echo "✓ $1" >/dev/tty
+    fi
 }
 
 log_warning() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARNING] $1"
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] [WARNING] $1"
+    echo "$message" >>"$LOG_FILE"
+    if [[ "${2:-}" == "--terminal" ]]; then
+        echo "⚠ $1" >/dev/tty
+    fi
 }
 
 log_error() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1"
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1"
+    echo "$message" >>"$LOG_FILE"
+    if [[ "${2:-}" == "--terminal" ]]; then
+        echo "✗ $1" >/dev/tty
+    fi
 }
 
 # Helper function to print error to terminal and exit
@@ -203,18 +219,34 @@ install_prerequisites() {
     if [[ ${#packages_to_install[@]} -gt 0 ]]; then
         log_info "Installing missing prerequisites: ${packages_to_install[*]}"
 
+        log_info "Installing packages: ${packages_to_install[*]}" --terminal
+
         case "$DISTRO_ID" in
         ubuntu | debian | pop | linuxmint)
-            sudo apt update >>"$LOG_FILE" 2>&1 && sudo apt install -y "${packages_to_install[@]}" >>"$LOG_FILE" 2>&1
+            {
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: sudo apt update"
+                sudo apt update
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: sudo apt install -y ${packages_to_install[*]}"
+                sudo apt install -y "${packages_to_install[@]}"
+            } >>"$LOG_FILE" 2>&1
             ;;
         fedora)
-            sudo dnf install -y "${packages_to_install[@]}" >>"$LOG_FILE" 2>&1
+            {
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: sudo dnf install -y ${packages_to_install[*]}"
+                sudo dnf install -y "${packages_to_install[@]}"
+            } >>"$LOG_FILE" 2>&1
             ;;
         opensuse-tumbleweed)
-            sudo zypper install -y "${packages_to_install[@]}" >>"$LOG_FILE" 2>&1
+            {
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: sudo zypper install -y ${packages_to_install[*]}"
+                sudo zypper install -y "${packages_to_install[@]}"
+            } >>"$LOG_FILE" 2>&1
             ;;
         arch | manjaro | endeavouros)
-            sudo pacman -S --noconfirm "${packages_to_install[@]}" >>"$LOG_FILE" 2>&1
+            {
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: sudo pacman -S --noconfirm ${packages_to_install[*]}"
+                sudo pacman -S --noconfirm "${packages_to_install[@]}"
+            } >>"$LOG_FILE" 2>&1
             ;;
         *)
             log_error "Unknown distribution: $DISTRO_ID"
@@ -222,6 +254,13 @@ install_prerequisites() {
             exit_with_error "Internal error: Unknown distribution during package installation."
             ;;
         esac
+
+        if [[ $? -eq 0 ]]; then
+            log_success "Package installation completed" --terminal
+        else
+            log_error "Package installation failed"
+            exit_with_error "Failed to install required packages. Check your package manager."
+        fi
 
         # Verify installations
         for package in "${packages_to_install[@]}"; do
@@ -284,18 +323,28 @@ install_yay() {
     fi
 
     # Clone yay from AUR
-    log_info "Cloning yay from AUR..."
-    if git clone https://aur.archlinux.org/yay.git "$yay_dir" >>"$LOG_FILE" 2>&1; then
-        log_success "Yay repository cloned to /tmp/yay"
+    log_info "Cloning yay from AUR..." --terminal
+    {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: git clone https://aur.archlinux.org/yay.git $yay_dir"
+        git clone https://aur.archlinux.org/yay.git "$yay_dir"
+    } >>"$LOG_FILE" 2>&1
+
+    if [[ $? -eq 0 ]]; then
+        log_success "Yay repository cloned to /tmp/yay" --terminal
     else
         log_error "Failed to clone yay repository"
         exit_with_error "Could not clone yay AUR helper. Check your network connection."
     fi
 
     # Build and install yay
-    log_info "Building and installing yay..."
-    if (cd "$yay_dir" && makepkg -si --noconfirm >>"$LOG_FILE" 2>&1); then
-        log_success "Yay installed successfully"
+    log_info "Building and installing yay..." --terminal
+    {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: makepkg -si --noconfirm in $yay_dir"
+        cd "$yay_dir" && makepkg -si --noconfirm
+    } >>"$LOG_FILE" 2>&1
+
+    if [[ $? -eq 0 ]]; then
+        log_success "Yay installed successfully" --terminal
     else
         log_error "Failed to build and install yay"
         log_error "Please check makepkg output for details"
@@ -369,8 +418,14 @@ clone_repository() {
     local target_dir="$HOME/.local/share/nocturne"
 
     # Clone the repository
-    if git clone "$repo_url" "$target_dir" >>"$LOG_FILE" 2>&1; then
-        log_success "Repository cloned to ~/.local/share/nocturne"
+    log_info "Cloning repository..." --terminal
+    {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: git clone $repo_url $target_dir"
+        git clone "$repo_url" "$target_dir"
+    } >>"$LOG_FILE" 2>&1
+
+    if [[ $? -eq 0 ]]; then
+        log_success "Repository cloned to ~/.local/share/nocturne" --terminal
     else
         log_error "Failed to clone repository from $repo_url"
         exit_with_error "Could not clone Nocturne repository. Check your network connection."
@@ -385,9 +440,15 @@ download_binary() {
     local target_file="$HOME/.local/bin/nocturne"
 
     # Download the binary using wget (installed as prerequisite)
-    if wget -O "$target_file" "$binary_url" >>"$LOG_FILE" 2>&1; then
+    log_info "Downloading Nocturne binary..." --terminal
+    {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running: wget -O $target_file $binary_url"
+        wget -O "$target_file" "$binary_url"
+    } >>"$LOG_FILE" 2>&1
+
+    if [[ $? -eq 0 ]]; then
         chmod +x "$target_file"
-        log_success "Nocturne binary downloaded to ~/.local/bin/nocturne"
+        log_success "Nocturne binary downloaded to ~/.local/bin/nocturne" --terminal
     else
         log_error "Failed to download binary using wget"
         exit_with_error "Could not download Nocturne binary. Check your network connection."
@@ -447,7 +508,6 @@ verify_installation() {
         # Add ~/.local/bin to PATH if not already there
         if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
             log_info "Adding ~/.local/bin to PATH"
-            echo 'export PATH="$HOME/.local/bin:$PATH"' >>"$HOME/.bashrc"
             log_info "Please run 'source ~/.bashrc' or restart your terminal"
         fi
 
@@ -471,6 +531,41 @@ verify_installation() {
     fi
 }
 
+# Authenticate sudo once at the beginning
+authenticate_sudo() {
+    echo "Nocturne installation requires sudo privileges for package installation."
+    echo "Please enter your password:"
+
+    # Test sudo access and keep it alive
+    if sudo -v; then
+        log_info "Sudo authentication successful" --terminal
+
+        # Keep sudo alive in background
+        {
+            while true; do
+                sleep 60
+                sudo -n true
+                if [[ $? -ne 0 ]]; then
+                    break
+                fi
+            done
+        } &
+        SUDO_REFRESH_PID=$!
+
+        return 0
+    else
+        log_error "Sudo authentication failed" --terminal
+        exit_with_error "Sudo access required for installation. Please run with appropriate privileges."
+    fi
+}
+
+# Clean up sudo refresh background process
+cleanup_sudo() {
+    if [[ -n "${SUDO_REFRESH_PID:-}" ]]; then
+        kill "$SUDO_REFRESH_PID" 2>/dev/null || true
+    fi
+}
+
 # Main execution
 main() {
     print_banner
@@ -478,11 +573,13 @@ main() {
     echo "Detailed logs: $LOG_FILE"
     echo
 
-    # Redirect all logging to file from this point forward
-    exec 1>>"$LOG_FILE"
-    exec 2>>"$LOG_FILE"
+    # Authenticate sudo once at the beginning
+    authenticate_sudo
 
-    log_info "Starting Nocturne bootstrap process..."
+    # Set up cleanup trap
+    trap cleanup_sudo EXIT
+
+    log_info "Starting Nocturne bootstrap process..." --terminal
 
     detect_os
     detect_linux_distro
@@ -493,15 +590,8 @@ main() {
     copy_initial_config
     verify_installation
 
-    # Restore stdout for final terminal message
-    exec 1>/dev/tty
-    exec 2>/dev/tty
-
     echo
-    echo "Nocturne bootstrap completed successfully!"
-    echo "Full installation log: $LOG_FILE"
-    echo
-    echo "Attempting to start Nocturne TUI"
+    export PATH="$HOME/.local/bin:$PATH"
     nocturne
 }
 
