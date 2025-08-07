@@ -32,18 +32,18 @@ jobs:
       run: zig build
 
     - name: Test version output
-      run: ./zig-out/bin/nocturne --version
+      run: ./zig-out/bin/nwizard --version
 
     - name: Test help output
-      run: ./zig-out/bin/nocturne --help
+      run: ./zig-out/bin/nwizard --help
 
     - name: Test no-sudo mode (quick exit)
       run: |
-        timeout 2s ./zig-out/bin/nocturne --no-sudo || [ $? -eq 124 ] && echo "No-sudo mode works"
+        timeout 2s ./zig-out/bin/nwizard --no-sudo || [ $? -eq 124 ] && echo "No-sudo mode works"
 
     - name: Upload binary artifact
       uses: actions/upload-artifact@v4
       with:
-        name: nocturne-linux-x86_64-${{ github.sha }}
-        path: zig-out/bin/nocturne
+        name: nwizard-linux-x86_64-${{ github.sha }}
+        path: zig-out/bin/nwizard
         retention-days: 90

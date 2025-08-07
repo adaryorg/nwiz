@@ -28,8 +28,8 @@ jobs:
 
     - name: Test binary
       run: |
-        ./zig-out/bin/nocturne --version
-        ./zig-out/bin/nocturne --help
+        ./zig-out/bin/nwizard --version
+        ./zig-out/bin/nwizard --help
 
     - name: Get version from git tag
       id: version
@@ -42,25 +42,25 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.version.outputs.version }}
-        name: "Nocturne ${{ steps.version.outputs.version }}"
-        files: zig-out/bin/nocturne
+        name: "nwizard ${{ steps.version.outputs.version }}"
+        files: zig-out/bin/nwizard
         draft: false
         prerelease: false
         generate_release_notes: true
         body: |
-          ## Nocturne TUI ${{ steps.version.outputs.version }}
+          ## nwizard TUI ${{ steps.version.outputs.version }}
           
           Linux binary for the Nocturne desktop environment management tool.
           
           ### Installation
           ```bash
-          chmod +x nocturne
-          sudo mv nocturne /usr/local/bin/
+          chmod +x nwizard
+          sudo mv nwizard /usr/local/bin/
           ```
           
           ### Usage
           ```bash
-          nocturne --help
+          nwizard --help
           ```
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
