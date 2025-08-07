@@ -14,6 +14,9 @@ const build_options = @import("build_options");
 // Global variables for cleanup
 var global_tty: ?*vaxis.Tty = null;
 var global_vx: ?*vaxis.Vaxis = null;
+var signal_exit_requested: bool = false;
+var global_async_executor: ?*executor.AsyncCommandExecutor = null;
+pub var global_shell_pid: ?std.posix.pid_t = null;
 
 // Panic handler to restore terminal
 pub fn panic(message: []const u8, stack_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
@@ -66,17 +69,115 @@ fn restoreTerminalCompletely() void {
 fn signalHandler(sig: c_int) callconv(.C) void {
     _ = sig;
     
-    // Comprehensive terminal restoration
-    if (global_vx) |vx| {
-        if (global_tty) |tty| {
-            vx.exitAltScreen(tty.anyWriter()) catch {};
-        }
+    // If there's a running shell wrapper, kill it directly
+    if (global_shell_pid) |shell_pid| {
+        // Simple and direct: just kill the shell wrapper PID
+        _ = std.posix.kill(shell_pid, std.posix.SIG.KILL) catch {};
+        global_shell_pid = null;
     }
+    
+    // Set immediate exit flag
+    signal_exit_requested = true;
+    
+    // Do terminal restoration but don't use vaxis methods that might block
     restoreTerminalCompletely();
     
+    // Request shutdown through the normal mechanism
     sudo.requestShutdown();
 }
 
+// Render exit confirmation dialog
+fn renderExitConfirmation(win: vaxis.Window, app_theme: *const theme.Theme) void {
+    // Create a centered dialog box
+    const dialog_width: usize = 46;
+    const dialog_height: usize = 7;  // 3 lines of text + 2 borders
+    
+    const center_x = if (win.width >= dialog_width) (win.width - dialog_width) / 2 else 0;
+    const center_y = if (win.height >= dialog_height) (win.height - dialog_height) / 2 else 0;
+    
+    // Create dialog window
+    const dialog_win = win.child(.{
+        .x_off = @intCast(center_x),
+        .y_off = @intCast(center_y),
+        .width = dialog_width,
+        .height = dialog_height,
+        .border = .{
+            .where = .all,
+            .style = .{ .fg = app_theme.border.toVaxisColor() },
+        },
+    });
+    
+    // Clear dialog background
+    const inner_win = dialog_win.child(.{
+        .x_off = 1,
+        .y_off = 1,
+        .width = dialog_win.width -| 2,
+        .height = dialog_win.height -| 2,
+    });
+    
+    // Fill background with spaces
+    var row: usize = 0;
+    while (row < inner_win.height) : (row += 1) {
+        const line = " " ** 48; // Fill the width with spaces
+        const bg_segment = vaxis.Segment{
+            .text = line[0..@min(line.len, inner_win.width)],
+            .style = .{},
+        };
+        const bg_win = inner_win.child(.{
+            .x_off = 0,
+            .y_off = @intCast(row),
+        });
+        _ = bg_win.printSegment(bg_segment, .{ .row_offset = 0 });
+    }
+    
+    // Warning message - first line, no padding
+    const warning_style = vaxis.Style{ 
+        .fg = app_theme.white.toVaxisColor(),
+    };
+    const warning_text = "A command is still running.";
+    const warning_x = if (inner_win.width >= warning_text.len) (inner_win.width - warning_text.len) / 2 else 0;
+    
+    const warning_win = inner_win.child(.{
+        .x_off = @intCast(warning_x),
+        .y_off = 0,  // First line
+    });
+    const warning_segment = vaxis.Segment{
+        .text = warning_text,
+        .style = warning_style,
+    };
+    _ = warning_win.printSegment(warning_segment, .{ .row_offset = 0 });
+    
+    // Instructions
+    const instruction_style = vaxis.Style{ 
+        .fg = app_theme.footer_text.toVaxisColor(),
+    };
+    
+    const instruction1_text = "Press 'q' again to force exit";
+    const instruction1_x = if (inner_win.width >= instruction1_text.len) (inner_win.width - instruction1_text.len) / 2 else 0;
+    
+    const instruction1_win = inner_win.child(.{
+        .x_off = @intCast(instruction1_x),
+        .y_off = 1,  // Second line
+    });
+    const instruction1_segment = vaxis.Segment{
+        .text = instruction1_text,
+        .style = instruction_style,
+    };
+    _ = instruction1_win.printSegment(instruction1_segment, .{ .row_offset = 0 });
+    
+    const instruction2_text = "Press [ESC] to cancel";
+    const instruction2_x = if (inner_win.width >= instruction2_text.len) (inner_win.width - instruction2_text.len) / 2 else 0;
+    
+    const instruction2_win = inner_win.child(.{
+        .x_off = @intCast(instruction2_x),
+        .y_off = 2,  // Third line
+    });
+    const instruction2_segment = vaxis.Segment{
+        .text = instruction2_text,
+        .style = instruction_style,
+    };
+    _ = instruction2_win.printSegment(instruction2_segment, .{ .row_offset = 0 });
+}
 
 const Event = union(enum) {
     key_press: vaxis.Key,
@@ -87,6 +188,7 @@ const Event = union(enum) {
 const AppState = enum {
     menu,
     viewing_output,
+    exit_confirmation,
 };
 
 // Print version information
@@ -100,16 +202,18 @@ fn printVersion() void {
 const AppConfig = struct {
     should_continue: bool = true,
     use_sudo: bool = true,
+    config_file: ?[]const u8 = null,
 };
 
 // Print help information
 fn printHelp() void {
     std.debug.print("Nocturne TUI - Terminal interface for Nocturne desktop environment\n\n", .{});
-    std.debug.print("Usage: nocturne [OPTIONS]\n\n", .{});
+    std.debug.print("Usage: nwizard [OPTIONS]\n\n", .{});
     std.debug.print("Options:\n", .{});
     std.debug.print("  -v, --version    Show version information\n", .{});
     std.debug.print("  -h, --help       Show this help message\n", .{});
     std.debug.print("  -n, --no-sudo    Skip sudo authentication (for testing)\n", .{});
+    std.debug.print("  -c, --config     Path to custom configuration file (default: ~/.config/nwizard/menu.toml)\n", .{});
 }
 
 // Parse command line arguments
@@ -119,7 +223,9 @@ fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
 
     var app_config = AppConfig{};
 
-    for (args[1..]) |arg| {
+    var i: usize = 1;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
         if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
             printVersion();
             app_config.should_continue = false;
@@ -130,6 +236,14 @@ fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
             return app_config;
         } else if (std.mem.eql(u8, arg, "--no-sudo") or std.mem.eql(u8, arg, "-n")) {
             app_config.use_sudo = false;
+        } else if (std.mem.eql(u8, arg, "--config") or std.mem.eql(u8, arg, "-c")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --config requires a file path\n", .{});
+                app_config.should_continue = false;
+                return app_config;
+            }
+            app_config.config_file = try allocator.dupe(u8, args[i]);
         } else {
             std.debug.print("Unknown argument: {s}\n", .{arg});
             std.debug.print("Use --help for usage information.\n", .{});
@@ -142,53 +256,88 @@ fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
 }
 
 // Check if the configuration directory and files exist
-fn checkConfigurationBootstrap(allocator: std.mem.Allocator) !struct { menu_path: []const u8, theme_path: []const u8, install_path: []const u8 } {
+fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_file: ?[]const u8) !struct { menu_path: []const u8, theme_path: []const u8, install_path: []const u8 } {
     const home_dir = std.posix.getenv("HOME") orelse {
         std.debug.print("Error: HOME environment variable not set\n", .{});
         return error.HomeNotFound;
     };
     
-    // Build the config directory path
-    const config_dir = try std.fmt.allocPrint(allocator, "{s}/.config/nocturne", .{home_dir});
-    defer allocator.free(config_dir);
+    // Determine menu.toml path and config directory
+    var menu_toml_path: []const u8 = undefined;
+    var config_dir_allocated: []const u8 = undefined;
+    var should_free_config_dir = false;
     
-    // Check if config directory exists
-    std.fs.cwd().access(config_dir, .{}) catch {
-        std.debug.print("Error: Configuration directory does not exist: {s}\n", .{config_dir});
-        std.debug.print("Please ensure Nocturne is properly installed and configured.\n", .{});
-        return error.ConfigDirNotFound;
-    };
-    
-    // Build the menu.toml path
-    const menu_toml_path = try std.fmt.allocPrint(allocator, "{s}/menu.toml", .{config_dir});
-    
-    // Check if menu.toml exists
-    std.fs.cwd().access(menu_toml_path, .{}) catch {
-        allocator.free(menu_toml_path);
-        std.debug.print("Error: Menu configuration file does not exist: {s}/menu.toml\n", .{config_dir});
-        std.debug.print("Please ensure Nocturne is properly installed and configured.\n", .{});
-        return error.MenuConfigNotFound;
-    };
+    if (custom_config_file) |config_file| {
+        // Use custom config file
+        menu_toml_path = try allocator.dupe(u8, config_file);
+        
+        // Extract directory from custom config file path
+        if (std.fs.path.dirname(config_file)) |dir| {
+            config_dir_allocated = try allocator.dupe(u8, dir);
+            should_free_config_dir = true;
+        } else {
+            // If no directory specified, use default config directory
+            config_dir_allocated = try std.fmt.allocPrint(allocator, "{s}/.config/nwizard", .{home_dir});
+            should_free_config_dir = true;
+        }
+        
+        // Check if custom config file exists
+        std.fs.cwd().access(menu_toml_path, .{}) catch {
+            allocator.free(menu_toml_path);
+            if (should_free_config_dir) allocator.free(config_dir_allocated);
+            std.debug.print("Error: Configuration file does not exist: {s}\n", .{config_file});
+            return error.MenuConfigNotFound;
+        };
+    } else {
+        // Use default config location
+        config_dir_allocated = try std.fmt.allocPrint(allocator, "{s}/.config/nwizard", .{home_dir});
+        should_free_config_dir = true;
+        
+        // Check if config directory exists
+        std.fs.cwd().access(config_dir_allocated, .{}) catch {
+            allocator.free(config_dir_allocated);
+            std.debug.print("Error: Configuration directory does not exist: {s}/.config/nwizard\n", .{home_dir});
+            std.debug.print("Please ensure Nocturne is properly installed and configured.\n", .{});
+            return error.ConfigDirNotFound;
+        };
+        
+        // Build the menu.toml path
+        menu_toml_path = try std.fmt.allocPrint(allocator, "{s}/menu.toml", .{config_dir_allocated});
+        
+        // Check if menu.toml exists
+        std.fs.cwd().access(menu_toml_path, .{}) catch {
+            allocator.free(menu_toml_path);
+            allocator.free(config_dir_allocated);
+            std.debug.print("Error: Menu configuration file does not exist: {s}/menu.toml\n", .{config_dir_allocated});
+            std.debug.print("Please ensure Nocturne is properly installed and configured.\n", .{});
+            return error.MenuConfigNotFound;
+        };
+    }
     
     // Build the theme.toml path
-    const theme_toml_path = try std.fmt.allocPrint(allocator, "{s}/theme.toml", .{config_dir});
+    const theme_toml_path = try std.fmt.allocPrint(allocator, "{s}/theme.toml", .{config_dir_allocated});
     
     // Check if theme.toml exists (not required, will use defaults if missing)
     std.fs.cwd().access(theme_toml_path, .{}) catch {
-        std.debug.print("Warning: Theme configuration file not found: {s}/theme.toml\n", .{config_dir});
+        std.debug.print("Warning: Theme configuration file not found: {s}/theme.toml\n", .{config_dir_allocated});
         std.debug.print("Using default theme colors.\n", .{});
         // Don't return error, just continue with defaults
     };
     
     // Build the install.toml path
-    const install_toml_path = try std.fmt.allocPrint(allocator, "{s}/install.toml", .{config_dir});
+    const install_toml_path = try std.fmt.allocPrint(allocator, "{s}/install.toml", .{config_dir_allocated});
     
     // Check if install.toml exists (not required, will be created if missing)
     std.fs.cwd().access(install_toml_path, .{}) catch {
-        std.debug.print("Info: Install configuration file not found: {s}/install.toml\n", .{config_dir});
+        std.debug.print("Info: Install configuration file not found: {s}/install.toml\n", .{config_dir_allocated});
         std.debug.print("Will be created when selections are made.\n", .{});
         // Don't return error, just continue - file will be created when needed
     };
+    
+    // Clean up allocated config directory if needed
+    if (should_free_config_dir) {
+        allocator.free(config_dir_allocated);
+    }
     
     return .{ .menu_path = menu_toml_path, .theme_path = theme_toml_path, .install_path = install_toml_path };
 }
@@ -203,6 +352,11 @@ pub fn main() !void {
         std.debug.print("Error parsing arguments: {}\n", .{err});
         return;
     };
+    defer {
+        if (app_config.config_file) |config_file| {
+            allocator.free(config_file);
+        }
+    }
     
     if (!app_config.should_continue) {
         return; // Exit after handling --version or --help
@@ -228,7 +382,7 @@ pub fn main() !void {
     }
 
     // Check configuration bootstrap after sudo authentication
-    const config_paths = checkConfigurationBootstrap(allocator) catch |err| {
+    const config_paths = checkConfigurationBootstrap(allocator, app_config.config_file) catch |err| {
         switch (err) {
             error.HomeNotFound, error.ConfigDirNotFound, error.MenuConfigNotFound => return,
             else => return err,
@@ -371,7 +525,12 @@ pub fn main() !void {
 
     // Initialize async command executor
     var async_command_executor = executor.AsyncCommandExecutor.init(allocator);
-    defer async_command_executor.deinit();
+    async_command_executor.setShell(menu_config.shell); // Use configured shell
+    defer {
+        global_async_executor = null;
+        async_command_executor.deinit();
+    }
+    global_async_executor = &async_command_executor;
 
     // Start background thread to maintain sudo authentication (if enabled)
     const renewal_thread = if (app_config.use_sudo) try sudo.startBackgroundRenewal() else null;
@@ -387,16 +546,22 @@ pub fn main() !void {
     var async_output_viewer: ?executor.AsyncOutputViewer = null;
 
     // Main event loop
-    while (!sudo.shouldShutdown()) {
+    while (!sudo.shouldShutdown() and !signal_exit_requested) {
         // Check for events with timeout
         while (loop.tryEvent()) |event| {
             switch (event) {
                 .key_press => |key| {
                     if (key.codepoint == 'c' and key.mods.ctrl) {
-                        sudo.requestShutdown();
-                        break;
-                    }
-                    if (key.codepoint == 'q') {
+                        // If there's a running shell wrapper, kill it directly
+                        if (global_shell_pid) |shell_pid| {
+                            _ = std.posix.kill(shell_pid, std.posix.SIG.KILL) catch {};
+                            global_shell_pid = null;
+                            
+                            // Also tell the async executor to stop immediately
+                            if (global_async_executor) |async_exec| {
+                                async_exec.killCommand();
+                            }
+                        }
                         sudo.requestShutdown();
                         break;
                     }
@@ -477,7 +642,17 @@ pub fn main() !void {
                                 }
                             } else {
                                 // Handle normal menu navigation
-                                if (key.matches(vaxis.Key.up, .{})) {
+                                if (key.codepoint == 'q') {
+                                    // Check if there's a running child process
+                                    if (global_shell_pid != null) {
+                                        // Switch to exit confirmation state
+                                        app_state = .exit_confirmation;
+                                    } else {
+                                        // No running process, exit immediately
+                                        sudo.requestShutdown();
+                                        break;
+                                    }
+                                } else if (key.matches(vaxis.Key.up, .{})) {
                                     menu_state.navigateUp();
                                 } else if (key.matches(vaxis.Key.down, .{})) {
                                     menu_state.navigateDown();
@@ -537,7 +712,17 @@ pub fn main() !void {
                         },
                         .viewing_output => {
                             if (async_output_viewer) |*viewer| {
-                                if (key.matches(vaxis.Key.up, .{})) {
+                                if (key.codepoint == 'q') {
+                                    // Check if there's a running child process
+                                    if (global_shell_pid != null) {
+                                        // Switch to exit confirmation state
+                                        app_state = .exit_confirmation;
+                                    } else {
+                                        // No running process, exit immediately
+                                        sudo.requestShutdown();
+                                        break;
+                                    }
+                                } else if (key.matches(vaxis.Key.up, .{})) {
                                     viewer.scrollUp();
                                 } else if (key.matches(vaxis.Key.down, .{})) {
                                     // Calculate available height based on window size
@@ -559,16 +744,33 @@ pub fn main() !void {
                                     }
                                     async_output_viewer = null;
                                     app_state = .menu;
-                                } else if (key.codepoint == 'c' and key.mods.ctrl) {
-                                    // Kill running command with Ctrl+C
+                                } else if (key.codepoint == 'c') {
+                                    // Kill running command with 'c' key
                                     if (async_command_executor.isRunning()) {
                                         viewer.killCommand();
-                                    } else {
-                                        // If command is not running, Ctrl+C exits the app
-                                        sudo.requestShutdown();
-                                        break;
+                                    }
+                                } else if (key.codepoint == 's') {
+                                    // Toggle output visibility
+                                    viewer.toggleOutputVisibility();
+                                }
+                            }
+                        },
+                        .exit_confirmation => {
+                            if (key.codepoint == 'q') {
+                                // Second 'q' pressed - force exit
+                                if (global_shell_pid) |shell_pid| {
+                                    _ = std.posix.kill(shell_pid, std.posix.SIG.KILL) catch {};
+                                    global_shell_pid = null;
+                                    
+                                    if (global_async_executor) |async_exec| {
+                                        async_exec.killCommand();
                                     }
                                 }
+                                sudo.requestShutdown();
+                                break;
+                            } else if (key.matches(vaxis.Key.escape, .{})) {
+                                // Cancel exit confirmation
+                                app_state = if (async_output_viewer != null) .viewing_output else .menu;
                             }
                         },
                     }
@@ -581,7 +783,7 @@ pub fn main() !void {
         }
         
         // Check for shutdown after processing events
-        if (sudo.shouldShutdown()) {
+        if (sudo.shouldShutdown() or signal_exit_requested) {
             break;
         }
 
@@ -597,6 +799,17 @@ pub fn main() !void {
                 if (async_output_viewer) |*viewer| {
                     viewer.render(win);
                 }
+            },
+            .exit_confirmation => {
+                // Render the current view first (menu or output)
+                if (async_output_viewer) |*viewer| {
+                    viewer.render(win);
+                } else {
+                    menu_renderer.render(win, &menu_state);
+                }
+                
+                // Then render the exit confirmation overlay
+                renderExitConfirmation(win, &app_theme);
             },
         }
 

@@ -397,15 +397,15 @@ setup_directories() {
         mv "$HOME/.local/share/nocturne" "$HOME/.local/share/nocturne_old"
     fi
 
-    # Handle ~/.config/nocturne
-    if [[ -d "$HOME/.config/nocturne" ]]; then
-        log_warning "~/.config/nocturne already exists"
-        if [[ -d "$HOME/.config/nocturne_old" ]]; then
-            log_info "Removing existing ~/.config/nocturne_old backup"
-            rm -rf "$HOME/.config/nocturne_old"
+    # Handle ~/.config/nwizard
+    if [[ -d "$HOME/.config/nwizard" ]]; then
+        log_warning "~/.config/nwizard already exists"
+        if [[ -d "$HOME/.config/nwizard_old" ]]; then
+            log_info "Removing existing ~/.config/nwizard_old backup"
+            rm -rf "$HOME/.config/nwizard_old"
         fi
-        log_info "Moving ~/.config/nocturne to ~/.config/nocturne_old"
-        mv "$HOME/.config/nocturne" "$HOME/.config/nocturne_old"
+        log_info "Moving ~/.config/nwizard to ~/.config/nwizard_old"
+        mv "$HOME/.config/nwizard" "$HOME/.config/nwizard_old"
     fi
 
     # Create required directories
@@ -419,10 +419,10 @@ setup_directories() {
         mkdir -p "$HOME/.local/share"
     fi
 
-    # Create ~/.config/nocturne directory during bootstrap
-    if [[ ! -d "$HOME/.config/nocturne" ]]; then
-        log_info "Creating ~/.config/nocturne directory"
-        mkdir -p "$HOME/.config/nocturne"
+    # Create ~/.config/nwizard directory during bootstrap
+    if [[ ! -d "$HOME/.config/nwizard" ]]; then
+        log_info "Creating ~/.config/nwizard directory"
+        mkdir -p "$HOME/.config/nwizard"
     fi
 
     log_success "Directory structure prepared"
@@ -478,7 +478,7 @@ copy_initial_config() {
     log_info "Copying initial configuration files..."
 
     local source_config_dir="$HOME/.local/share/nocturne/config"
-    local target_config_dir="$HOME/.config/nocturne"
+    local target_config_dir="$HOME/.config/nwizard"
 
     # Check if source config directory exists in the cloned repository
     if [[ ! -d "$source_config_dir" ]]; then
@@ -495,7 +495,7 @@ copy_initial_config() {
             log_info "  - $(basename "$file")"
         done
 
-        log_info "Copying TOML configuration files to ~/.config/nocturne"
+        log_info "Copying TOML configuration files to ~/.config/nwizard"
         cp "$source_config_dir"/*.toml "$target_config_dir/" 2>>"$LOG_FILE"
 
         # Verify files were copied

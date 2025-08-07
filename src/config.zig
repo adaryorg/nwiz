@@ -169,6 +169,9 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
         if (parser.findKey("description")) |_| {
             config.description = parser.parseString() catch "System administration tools";
         }
+        if (parser.findKey("shell")) |_| {
+            config.shell = parser.parseString() catch "bash";
+        }
         if (parser.findKey("ascii_art")) |_| {
             const parsed_art = parser.parseArray() catch null;
             if (parsed_art) |art| {

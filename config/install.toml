@@ -1,6 +1,9 @@
-[defaults]
-browser = "firefox"
+# Nocturne Installation Configuration
+# This file stores selection values from multiple selection and selector menu items
+
+browser = "zen"
 terminal = "ghostty"
-webapp = "brave"
 theme = "purple"
+webapp = "brave"
 shell = "zsh"
+packages = ["vim", "zsh", "curl"]

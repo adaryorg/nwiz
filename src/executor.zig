@@ -5,6 +5,9 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const theme = @import("theme.zig");
 
+// Import global shell PID from main
+const main = @import("main.zig");
+
 pub const ExecutionResult = struct {
     success: bool,
     output: []const u8,
@@ -25,6 +28,7 @@ pub const AsyncCommandExecutor = struct {
     is_running: bool = false,
     exit_code: ?u8 = null,
     mutex: std.Thread.Mutex = .{},
+    shell: []const u8 = "bash", // Default shell
 
     const Self = @This();
 
@@ -33,7 +37,12 @@ pub const AsyncCommandExecutor = struct {
             .allocator = allocator,
             .output_buffer = std.ArrayList(u8).init(allocator),
             .error_buffer = std.ArrayList(u8).init(allocator),
+            .shell = "bash", // Will be set later from config
         };
+    }
+    
+    pub fn setShell(self: *Self, shell: []const u8) void {
+        self.shell = shell;
     }
 
     pub fn deinit(self: *Self) void {
@@ -52,14 +61,17 @@ pub const AsyncCommandExecutor = struct {
         self.error_buffer.clearRetainingCapacity();
         self.exit_code = null;
 
-        // Create child process
+        // Create child process using configured shell
         var child = try self.allocator.create(std.process.Child);
-        child.* = std.process.Child.init(&[_][]const u8{ "bash", "-c", command }, self.allocator);
+        child.* = std.process.Child.init(&[_][]const u8{ self.shell, "-c", command }, self.allocator);
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Pipe;
         child.stdin_behavior = .Ignore;
 
         try child.spawn();
+        
+        // Store the shell wrapper PID globally for direct killing
+        main.global_shell_pid = child.id;
         
         // Set pipes to non-blocking mode
         if (child.stdout) |stdout| {
@@ -90,7 +102,7 @@ pub const AsyncCommandExecutor = struct {
         var stdout_closed = false;
         var stderr_closed = false;
 
-        // Try to read stdout non-blocking
+        // Try to read stdout non-blocking (check if still open)
         if (child.stdout) |stdout| {
             // Read in smaller chunks to get more responsive output
             var buffer: [1024]u8 = undefined;
@@ -146,21 +158,26 @@ pub const AsyncCommandExecutor = struct {
 
         // Check if both pipes are closed, which indicates process termination
         if (stdout_closed and stderr_closed) {
-            // Process has finished, try to get exit code non-blockingly
-            const term = child.wait() catch {
-                // If wait fails, assume process terminated with error
+            // Only try to wait if the process is still marked as running
+            if (self.is_running) {
+                // Process has finished, try to get exit code
+                const term = child.wait() catch {
+                    // If wait fails, assume process terminated with error
+                    self.is_running = false;
+                    self.exit_code = 1;
+                    main.global_shell_pid = null;
+                    return any_data_read;
+                };
+                
                 self.is_running = false;
-                self.exit_code = 1;
-                return any_data_read;
-            };
-            
-            self.is_running = false;
-            self.exit_code = switch (term) {
-                .Exited => |code| code,
-                .Signal => 1,
-                .Stopped => 1,
-                .Unknown => 1,
-            };
+                main.global_shell_pid = null; // Clear the global PID when command finishes
+                self.exit_code = switch (term) {
+                    .Exited => |code| code,
+                    .Signal => 1,
+                    .Stopped => 1,
+                    .Unknown => 1,
+                };
+            }
         }
 
         return any_data_read;
@@ -171,7 +188,13 @@ pub const AsyncCommandExecutor = struct {
         defer self.mutex.unlock();
 
         if (self.child_process) |child| {
-            _ = child.kill() catch {};
+            // Simple and direct: just kill the shell wrapper
+            _ = std.posix.kill(child.id, std.posix.SIG.KILL) catch {};
+            
+            // Clear the global PID
+            main.global_shell_pid = null;
+            
+            // Mark as not running immediately
             self.is_running = false;
             self.exit_code = 1;
         }
@@ -225,6 +248,7 @@ pub const AsyncCommandExecutor = struct {
             .exit_code = exit_code,
         };
     }
+    
 };
 
 // Keep the old synchronous executor for compatibility
@@ -279,6 +303,9 @@ pub const AsyncOutputViewer = struct {
     command_was_running: bool = false,
     command: []const u8,
     theme: *const theme.Theme,
+    show_output: bool = false,
+    spinner_frame: usize = 0,
+    last_update_time: i64 = 0,
 
     const Self = @This();
 
@@ -441,12 +468,84 @@ pub const AsyncOutputViewer = struct {
         _ = status_win.printSegment(status_segment, .{ .row_offset = 0 });
         row += 2; // Add spacing after title
 
-        // Get current output
-        const output_text = self.async_executor.getOutput();
-        const output_to_display = if (output_text.len > 0) output_text else "Waiting for output...";
-        
-        // Split output into lines and handle word wrapping
-        const output_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
+        // Check if we should show output or spinner
+        if (!self.show_output) {
+            // Show spinner view (whether running or completed)
+            if (self.async_executor.isRunning()) {
+                // Update spinner animation only when running
+                const current_time = std.time.milliTimestamp();
+                if (current_time - self.last_update_time > 100) { // Update every 100ms
+                    self.spinner_frame = (self.spinner_frame + 1) % 8;
+                    self.last_update_time = current_time;
+                }
+            }
+            
+            // Display status message
+            const status_msg = if (self.async_executor.isRunning()) 
+                "Processing command..."
+            else if (self.async_executor.getExitCode()) |code|
+                if (code == 0) "Command completed successfully" else "Command failed"
+            else 
+                "Command completed";
+            
+            const msg_style = vaxis.Style{ .fg = self.theme.menu_header.toVaxisColor() };
+            const msg_center_x = if (inner_win.width >= status_msg.len) 
+                (inner_win.width - status_msg.len) / 2
+            else 
+                0;
+            
+            // Only draw spinner if command is still running
+            if (self.async_executor.isRunning()) {
+                const spinner_chars = [_][]const u8{ "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" };
+                const spinner_win = inner_win.child(.{
+                    .x_off = @intCast(msg_center_x -| 2), // Before message
+                    .y_off = @intCast(row + 2),
+                });
+                
+                const spinner_segment = vaxis.Segment{
+                    .text = spinner_chars[self.spinner_frame],
+                    .style = msg_style,
+                };
+                _ = spinner_win.printSegment(spinner_segment, .{ .row_offset = 0 });
+            }
+            
+            // Draw status message
+            const msg_win = inner_win.child(.{
+                .x_off = @intCast(msg_center_x),
+                .y_off = @intCast(row + 2),
+            });
+            const msg_segment = vaxis.Segment{
+                .text = status_msg,
+                .style = msg_style,
+            };
+            _ = msg_win.printSegment(msg_segment, .{ .row_offset = 0 });
+            
+            // Add instruction to show output
+            const instruction_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColor() };
+            const instruction_text = "Press 's' to show output";
+            const instruction_width = instruction_text.len;
+            const instruction_x = if (inner_win.width >= instruction_width) 
+                (inner_win.width - instruction_width) / 2
+            else 
+                0;
+            
+            const instruction_win = inner_win.child(.{
+                .x_off = @intCast(instruction_x),
+                .y_off = @intCast(row + 4),
+            });
+            const instruction_segment = vaxis.Segment{
+                .text = instruction_text,
+                .style = instruction_style,
+            };
+            _ = instruction_win.printSegment(instruction_segment, .{ .row_offset = 0 });
+        } else {
+            // Show normal output
+            // Get current output
+            const output_text = self.async_executor.getOutput();
+            const output_to_display = if (output_text.len > 0) output_text else "Waiting for output...";
+            
+            // Split output into lines and handle word wrapping
+            const output_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
         
         var wrapped_lines = std.ArrayList([]const u8).init(std.heap.page_allocator);
         defer wrapped_lines.deinit();
@@ -564,15 +663,18 @@ pub const AsyncOutputViewer = struct {
             };
             _ = inner_win.printSegment(error_segment, .{ .row_offset = @intCast(display_row) });
         }
+        } // End of else block for show_output
 
         // Footer with enhanced help text
         const help_row = output_win.height -| 1;
         const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColor() };
         
-        const help_text = if (self.async_executor.isRunning())
-            "↑/↓: Scroll | PgUp/PgDn: Page | Ctrl+C: Kill command | Esc: Back to menu"
+        const help_text = if (!self.show_output and self.async_executor.isRunning())
+            "s: Show output | c: Kill command | Esc: Back to menu | Ctrl+C: Exit app"
+        else if (self.show_output and self.async_executor.isRunning())
+            "↑/↓: Scroll | PgUp/PgDn: Page | s: Hide output | c: Kill | Esc: Back | Ctrl+C: Exit"
         else
-            "↑/↓: Scroll | PgUp/PgDn: Page | Esc: Back to menu";
+            "↑/↓: Scroll | PgUp/PgDn: Page | Esc: Back to menu | Ctrl+C: Exit app";
             
         const help_segment = vaxis.Segment{
             .text = help_text,
@@ -702,6 +804,10 @@ pub const AsyncOutputViewer = struct {
 
     pub fn killCommand(self: *Self) void {
         self.async_executor.killCommand();
+    }
+    
+    pub fn toggleOutputVisibility(self: *Self) void {
+        self.show_output = !self.show_output;
     }
 };
 
