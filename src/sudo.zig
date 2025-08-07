@@ -3,18 +3,16 @@
 
 const std = @import("std");
 
-// Global shutdown state for sudo module
 var shutdown_requested: bool = false;
 var shutdown_mutex: std.Thread.Mutex = .{};
 
-// Sudo manager structure
 const SudoManager = struct {
     authenticated: bool = false,
     last_auth_time: i64 = 0,
     mutex: std.Thread.Mutex = .{},
     
     const Self = @This();
-    const REAUTH_THRESHOLD: i64 = 240; // 4 minutes in seconds
+    const REAUTH_THRESHOLD: i64 = 240;
     
     fn authenticate(self: *Self, allocator: std.mem.Allocator) !bool {
         const result = try std.process.Child.run(.{
@@ -72,7 +70,6 @@ pub fn shouldShutdown() bool {
     return shutdown_requested;
 }
 
-// Simple function to run initial sudo authentication before TUI
 pub fn authenticateInitial() !bool {
     std.debug.print("Nocturne TUI requires sudo access for system commands.\n", .{});
     
@@ -88,23 +85,20 @@ pub fn authenticateInitial() !bool {
     }
 }
 
-// Background thread function to maintain sudo authentication
 fn renewalThreadFn() void {
     const allocator = std.heap.page_allocator;
     
     while (!sudo_manager.shouldStop() and !shouldShutdown()) {
         sudo_manager.reauth(allocator) catch {};
         
-        // Sleep for 30 seconds before checking again, but check for shutdown every 50ms for responsiveness
         var sleep_count: u16 = 0;
-        while (sleep_count < 600 and !shouldShutdown()) {  // 600 * 50ms = 30 seconds
-            std.time.sleep(50 * std.time.ns_per_ms);  // 50ms sleep intervals
+        while (sleep_count < 600 and !shouldShutdown()) {
+            std.time.sleep(50 * std.time.ns_per_ms);
             sleep_count += 1;
         }
     }
 }
 
-// Start background renewal thread
 pub fn startBackgroundRenewal() !std.Thread {
     return try std.Thread.spawn(.{}, renewalThreadFn, .{});
 }

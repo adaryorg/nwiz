@@ -1,9 +1,9 @@
 # Nocturne Installation Configuration
 # This file stores selection values from multiple selection and selector menu items
 
-browser = "zen"
 terminal = "ghostty"
 theme = "purple"
 webapp = "brave"
+browser = "zen"
 shell = "zsh"
 packages = ["vim", "zsh", "curl"]

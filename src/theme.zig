@@ -4,6 +4,65 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 
+pub const BuiltinTheme = enum {
+    nocturne,
+    forest,
+    water,
+    nature,
+    fire,
+    
+    pub fn fromString(name: []const u8) ?BuiltinTheme {
+        // Convert input to lowercase for case-insensitive matching
+        var lowercase_buf: [32]u8 = undefined;
+        if (name.len > lowercase_buf.len) return null;
+        
+        for (name, 0..) |c, i| {
+            lowercase_buf[i] = std.ascii.toLower(c);
+        }
+        const lowercase_name = lowercase_buf[0..name.len];
+        
+        // Try exact matches first
+        if (std.mem.eql(u8, lowercase_name, "nocturne")) return .nocturne;
+        if (std.mem.eql(u8, lowercase_name, "forest")) return .forest;
+        if (std.mem.eql(u8, lowercase_name, "water")) return .water;
+        if (std.mem.eql(u8, lowercase_name, "nature")) return .nature;
+        if (std.mem.eql(u8, lowercase_name, "fire")) return .fire;
+        
+        // Fuzzy matching - find theme that starts with the input
+        const themes = getAllThemes();
+        for (themes) |theme| {
+            const theme_name = theme.getName();
+            if (std.mem.startsWith(u8, theme_name, lowercase_name)) {
+                return theme;
+            }
+        }
+        
+        // If no start match, try substring matching
+        for (themes) |theme| {
+            const theme_name = theme.getName();
+            if (std.mem.indexOf(u8, theme_name, lowercase_name) != null) {
+                return theme;
+            }
+        }
+        
+        return null;
+    }
+    
+    pub fn getName(self: BuiltinTheme) []const u8 {
+        return switch (self) {
+            .nocturne => "nocturne",
+            .forest => "forest",
+            .water => "water",
+            .nature => "nature",
+            .fire => "fire",
+        };
+    }
+    
+    pub fn getAllThemes() []const BuiltinTheme {
+        return &[_]BuiltinTheme{ .nocturne, .forest, .water, .nature, .fire };
+    }
+};
+
 pub const ThemeColor = struct {
     r: u8,
     g: u8,
@@ -27,40 +86,35 @@ pub const ThemeColor = struct {
 };
 
 pub const Theme = struct {
-    // ASCII art gradient colors (darkest to lightest)
-    gradient: [8]ThemeColor,
-    
-    // Base colors
+    gradient: [10]ThemeColor,
     white: ThemeColor,
     light_grey: ThemeColor,
     dark_grey: ThemeColor,
-    
-    // UI element colors (customizable, with defaults)
-    ascii_art: [8]ThemeColor, // Uses gradient by default
-    selected_menu_item: ThemeColor, // Uses gradient[0] by default
-    unselected_menu_item: ThemeColor, // Uses light_grey by default
-    menu_header: ThemeColor, // Uses gradient[1] by default
-    footer_text: ThemeColor, // Uses dark_grey by default
-    menu_item_comment: ThemeColor, // Uses dark_grey by default
-    menu_description: ThemeColor, // Uses dark_grey by default
-    selector_option: ThemeColor, // Uses light_grey by default
-    selector_selected_option: ThemeColor, // Uses gradient[0] by default
-    border: ThemeColor, // Uses light_grey by default
+    ascii_art: [10]ThemeColor,
+    selected_menu_item: ThemeColor,
+    unselected_menu_item: ThemeColor,
+    menu_header: ThemeColor,
+    footer_text: ThemeColor,
+    menu_item_comment: ThemeColor,
+    menu_description: ThemeColor,
+    selector_option: ThemeColor,
+    selector_selected_option: ThemeColor,
+    border: ThemeColor,
 
     pub fn init() Theme {
-        // Default Nocturne gradient colors (dark to light purple)
-        const gradient = [8]ThemeColor{
-            ThemeColor{ .r = 0x72, .g = 0x3d, .b = 0xc3 }, // nocturne1: #723dc3 (darkest - new)
-            ThemeColor{ .r = 0x80, .g = 0x50, .b = 0xcd }, // nocturne2: #8050cd (old color1)
-            ThemeColor{ .r = 0x8e, .g = 0x63, .b = 0xd3 }, // nocturne3: #8e63d3 (old color2)
-            ThemeColor{ .r = 0x9b, .g = 0x76, .b = 0xd8 }, // nocturne4: #9b76d8 (old color3)
-            ThemeColor{ .r = 0xa9, .g = 0x89, .b = 0xde }, // nocturne5: #a989de (old color4)
-            ThemeColor{ .r = 0xb7, .g = 0x9d, .b = 0xe3 }, // nocturne6: #b79de3 (old color5)
-            ThemeColor{ .r = 0xc0, .g = 0xa9, .b = 0xe7 }, // nocturne7: #c0a9e7 (old color6)
-            ThemeColor{ .r = 0xc9, .g = 0xb6, .b = 0xeb }, // nocturne8: #c9b6eb (lightest - new)
+        const gradient = [10]ThemeColor{
+            ThemeColor{ .r = 0x6a, .g = 0x2b, .b = 0xb8 },
+            ThemeColor{ .r = 0x77, .g = 0x3d, .b = 0xb4 },
+            ThemeColor{ .r = 0x80, .g = 0x50, .b = 0xcd },
+            ThemeColor{ .r = 0x8e, .g = 0x63, .b = 0xd3 },
+            ThemeColor{ .r = 0x9b, .g = 0x76, .b = 0xd8 },
+            ThemeColor{ .r = 0xa9, .g = 0x89, .b = 0xde },
+            ThemeColor{ .r = 0xb7, .g = 0x9d, .b = 0xe3 },
+            ThemeColor{ .r = 0xc0, .g = 0xa9, .b = 0xe7 },
+            ThemeColor{ .r = 0xc9, .g = 0xb5, .b = 0xeb },
+            ThemeColor{ .r = 0xd2, .g = 0xc1, .b = 0xef },
         };
         
-        // Base colors
         const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
         const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
         const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
@@ -71,26 +125,178 @@ pub const Theme = struct {
             .light_grey = light_grey,
             .dark_grey = dark_grey,
             .ascii_art = gradient,
-            .selected_menu_item = gradient[0], // Darkest gradient color
+            .selected_menu_item = gradient[0],
             .unselected_menu_item = light_grey,
-            .menu_header = gradient[1], // Second darkest gradient color
+            .menu_header = gradient[1],
             .footer_text = dark_grey,
             .menu_item_comment = dark_grey,
             .menu_description = dark_grey,
-            .selector_option = gradient[3], // Second lightest gradient color
-            .selector_selected_option = gradient[3], // Second lightest gradient color
+            .selector_option = gradient[3],
+            .selector_selected_option = gradient[3],
             .border = light_grey,
+        };
+    }
+    
+    pub fn createGreenTheme() Theme {
+        const gradient = [10]ThemeColor{
+            ThemeColor{ .r = 0x3a, .g = 0x7b, .b = 0x4c },
+            ThemeColor{ .r = 0x4a, .g = 0x8b, .b = 0x5c },
+            ThemeColor{ .r = 0x5a, .g = 0x96, .b = 0x69 },
+            ThemeColor{ .r = 0x6b, .g = 0xa1, .b = 0x76 },
+            ThemeColor{ .r = 0x7b, .g = 0xac, .b = 0x83 },
+            ThemeColor{ .r = 0x8c, .g = 0xb7, .b = 0x90 },
+            ThemeColor{ .r = 0x9c, .g = 0xc2, .b = 0x9d },
+            ThemeColor{ .r = 0xac, .g = 0xda, .b = 0xaa },
+            ThemeColor{ .r = 0xbc, .g = 0xe5, .b = 0xb7 },
+            ThemeColor{ .r = 0xcc, .g = 0xf0, .b = 0xc4 },
+        };
+        
+        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+        
+        return Theme{
+            .gradient = gradient,
+            .white = white,
+            .light_grey = light_grey,
+            .dark_grey = dark_grey,
+            .ascii_art = gradient,
+            .selected_menu_item = gradient[0],
+            .unselected_menu_item = light_grey,
+            .menu_header = gradient[1],
+            .footer_text = dark_grey,
+            .menu_item_comment = gradient[5],
+            .menu_description = dark_grey,
+            .selector_option = gradient[3],
+            .selector_selected_option = gradient[3],
+            .border = gradient[5],
+        };
+    }
+    
+    pub fn createBlueTheme() Theme {
+        const gradient = [10]ThemeColor{
+            ThemeColor{ .r = 0x2f, .g = 0x5f, .b = 0xb5 },
+            ThemeColor{ .r = 0x3c, .g = 0x6d, .b = 0xbe },
+            ThemeColor{ .r = 0x4a, .g = 0x7b, .b = 0xc8 },
+            ThemeColor{ .r = 0x5d, .g = 0x8b, .b = 0xce },
+            ThemeColor{ .r = 0x71, .g = 0x9b, .b = 0xd4 },
+            ThemeColor{ .r = 0x84, .g = 0xab, .b = 0xda },
+            ThemeColor{ .r = 0x98, .g = 0xbb, .b = 0xe0 },
+            ThemeColor{ .r = 0xab, .g = 0xcb, .b = 0xe6 },
+            ThemeColor{ .r = 0xbe, .g = 0xda, .b = 0xec },
+            ThemeColor{ .r = 0xd1, .g = 0xea, .b = 0xf2 },
+        };
+        
+        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+        
+        return Theme{
+            .gradient = gradient,
+            .white = white,
+            .light_grey = light_grey,
+            .dark_grey = dark_grey,
+            .ascii_art = gradient,
+            .selected_menu_item = gradient[0],
+            .unselected_menu_item = light_grey,
+            .menu_header = gradient[1],
+            .footer_text = dark_grey,
+            .menu_item_comment = gradient[5],
+            .menu_description = dark_grey,
+            .selector_option = gradient[3],
+            .selector_selected_option = gradient[3],
+            .border = gradient[5],
+        };
+    }
+    
+    pub fn createOrangeTheme() Theme {
+        const gradient = [10]ThemeColor{
+            ThemeColor{ .r = 0xa0, .g = 0x5a, .b = 0x26 },
+            ThemeColor{ .r = 0xa9, .g = 0x66, .b = 0x31 },
+            ThemeColor{ .r = 0xb8, .g = 0x72, .b = 0x3d },
+            ThemeColor{ .r = 0xc1, .g = 0x80, .b = 0x4e },
+            ThemeColor{ .r = 0xca, .g = 0x8f, .b = 0x5f },
+            ThemeColor{ .r = 0xd3, .g = 0x9d, .b = 0x70 },
+            ThemeColor{ .r = 0xdc, .g = 0xac, .b = 0x81 },
+            ThemeColor{ .r = 0xe5, .g = 0xba, .b = 0x92 },
+            ThemeColor{ .r = 0xee, .g = 0xc9, .b = 0xa3 },
+            ThemeColor{ .r = 0xf7, .g = 0xd7, .b = 0xb4 },
+        };
+        
+        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+        
+        return Theme{
+            .gradient = gradient,
+            .white = white,
+            .light_grey = light_grey,
+            .dark_grey = dark_grey,
+            .ascii_art = gradient,
+            .selected_menu_item = gradient[0],
+            .unselected_menu_item = light_grey,
+            .menu_header = gradient[1],
+            .footer_text = dark_grey,
+            .menu_item_comment = gradient[5],
+            .menu_description = dark_grey,
+            .selector_option = gradient[3],
+            .selector_selected_option = gradient[3],
+            .border = gradient[5],
+        };
+    }
+    
+    pub fn createRedTheme() Theme {
+        const gradient = [10]ThemeColor{
+            ThemeColor{ .r = 0xb2, .g = 0x2f, .b = 0x07 },
+            ThemeColor{ .r = 0xbd, .g = 0x3b, .b = 0x12 },
+            ThemeColor{ .r = 0xc8, .g = 0x47, .b = 0x1e },
+            ThemeColor{ .r = 0xd3, .g = 0x5b, .b = 0x35 },
+            ThemeColor{ .r = 0xde, .g = 0x6f, .b = 0x4c },
+            ThemeColor{ .r = 0xe9, .g = 0x83, .b = 0x63 },
+            ThemeColor{ .r = 0xf4, .g = 0x97, .b = 0x7a },
+            ThemeColor{ .r = 0xff, .g = 0xab, .b = 0x91 },
+            ThemeColor{ .r = 0xff, .g = 0xbf, .b = 0xa8 },
+            ThemeColor{ .r = 0xff, .g = 0xd3, .b = 0xbf },
+        };
+        
+        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+        
+        return Theme{
+            .gradient = gradient,
+            .white = white,
+            .light_grey = light_grey,
+            .dark_grey = dark_grey,
+            .ascii_art = gradient,
+            .selected_menu_item = gradient[0],
+            .unselected_menu_item = light_grey,
+            .menu_header = gradient[1],
+            .footer_text = dark_grey,
+            .menu_item_comment = gradient[5],
+            .menu_description = dark_grey,
+            .selector_option = gradient[3],
+            .selector_selected_option = gradient[3],
+            .border = gradient[5],
+        };
+    }
+    
+    pub fn createBuiltinTheme(builtin: BuiltinTheme) Theme {
+        return switch (builtin) {
+            .nocturne => Theme.init(),
+            .forest => Theme.createGreenTheme(),
+            .water => Theme.createBlueTheme(),
+            .nature => Theme.createOrangeTheme(),
+            .fire => Theme.createRedTheme(),
         };
     }
 
     pub fn deinit(self: *Theme, allocator: std.mem.Allocator) void {
         _ = self;
         _ = allocator;
-        // No dynamic allocation in current implementation
     }
 };
 
-// Simple TOML parser specifically for theme configuration
 pub const ThemeParser = struct {
     content: []const u8,
     pos: usize = 0,
@@ -111,7 +317,6 @@ pub const ThemeParser = struct {
             if (ch == ' ' or ch == '\t' or ch == '\n' or ch == '\r') {
                 self.pos += 1;
             } else if (ch == '#') {
-                // Skip comment line
                 while (self.pos < self.content.len and self.content[self.pos] != '\n') {
                     self.pos += 1;
                 }
@@ -126,7 +331,7 @@ pub const ThemeParser = struct {
         if (self.pos >= self.content.len or self.content[self.pos] != '"') {
             return error.InvalidFormat;
         }
-        self.pos += 1; // Skip opening quote
+        self.pos += 1;
 
         const start = self.pos;
         while (self.pos < self.content.len and self.content[self.pos] != '"') {
@@ -137,17 +342,14 @@ pub const ThemeParser = struct {
         }
 
         const result = self.content[start..self.pos];
-        self.pos += 1; // Skip closing quote
-        return result; // Return slice, don't allocate
+        self.pos += 1;
+        return result;
     }
     
-    // Helper function to resolve color variable references
     fn resolveColorReference(self: *Self, color_ref: []const u8, theme: *Theme) ThemeColor {
-        _ = self; // Unused parameter
-        // Default fallback color (light grey)
+        _ = self;
         const fallback = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
         
-        // Check if it's a gradient color reference
         if (std.mem.eql(u8, color_ref, "color1")) return theme.gradient[0];
         if (std.mem.eql(u8, color_ref, "color2")) return theme.gradient[1];
         if (std.mem.eql(u8, color_ref, "color3")) return theme.gradient[2];
@@ -156,18 +358,17 @@ pub const ThemeParser = struct {
         if (std.mem.eql(u8, color_ref, "color6")) return theme.gradient[5];
         if (std.mem.eql(u8, color_ref, "color7")) return theme.gradient[6];
         if (std.mem.eql(u8, color_ref, "color8")) return theme.gradient[7];
+        if (std.mem.eql(u8, color_ref, "color9")) return theme.gradient[8];
+        if (std.mem.eql(u8, color_ref, "color10")) return theme.gradient[9];
         
-        // Check if it's a base color reference
         if (std.mem.eql(u8, color_ref, "white")) return theme.white;
         if (std.mem.eql(u8, color_ref, "light_grey")) return theme.light_grey;
         if (std.mem.eql(u8, color_ref, "dark_grey")) return theme.dark_grey;
         
-        // Check if it's a direct hex color (fallback for old format)
         if (color_ref.len == 7 and color_ref[0] == '#') {
             return ThemeColor.fromHex(color_ref) catch fallback;
         }
         
-        // Invalid reference, return fallback
         return fallback;
     }
 
@@ -176,16 +377,13 @@ pub const ThemeParser = struct {
         while (self.pos < self.content.len) {
             const line_start = self.pos;
             
-            // Find end of line
             while (self.pos < self.content.len and self.content[self.pos] != '\n') {
                 self.pos += 1;
             }
             
             const line = self.content[line_start..self.pos];
-            // Check if this line starts a new section (starts with '[')
             const trimmed_line = std.mem.trim(u8, line, " \t\r");
             if (trimmed_line.len > 0 and trimmed_line[0] == '[') {
-                // Hit another section, stop
                 self.pos = start_pos;
                 return null;
             }
@@ -198,7 +396,7 @@ pub const ThemeParser = struct {
             }
             
             if (self.pos < self.content.len) {
-                self.pos += 1; // Skip newline
+                self.pos += 1;
             }
         }
         self.pos = start_pos;
@@ -221,8 +419,15 @@ pub const ThemeParser = struct {
     }
 };
 
-pub fn loadTheme(allocator: std.mem.Allocator, file_path: []const u8) !Theme {
-    // Try to read the theme file
+pub fn loadTheme(allocator: std.mem.Allocator, theme_spec: []const u8) !Theme {
+    if (BuiltinTheme.fromString(theme_spec)) |builtin| {
+        return Theme.createBuiltinTheme(builtin);
+    }
+    
+    return loadThemeFromFile(allocator, theme_spec);
+}
+
+pub fn loadThemeFromFile(allocator: std.mem.Allocator, file_path: []const u8) !Theme {
     const file_content = std.fs.cwd().readFileAlloc(allocator, file_path, 1024 * 1024) catch |err| {
         switch (err) {
             error.FileNotFound => {
@@ -238,12 +443,11 @@ pub fn loadTheme(allocator: std.mem.Allocator, file_path: []const u8) !Theme {
     defer allocator.free(file_content);
 
     var parser = ThemeParser.init(allocator, file_content);
-    var theme = Theme.init(); // Start with defaults
+    var theme = Theme.init();
 
-    // Parse gradient colors
     if (parser.findSection("gradient")) {
         var i: usize = 0;
-        while (i < 6) : (i += 1) {
+        while (i < 10) : (i += 1) {
             const key = try std.fmt.allocPrint(allocator, "color{}", .{i + 1});
             defer allocator.free(key);
             
@@ -251,12 +455,11 @@ pub fn loadTheme(allocator: std.mem.Allocator, file_path: []const u8) !Theme {
                 const color_str = parser.parseString() catch continue;
                 const color = ThemeColor.fromHex(color_str) catch continue;
                 theme.gradient[i] = color;
-                theme.ascii_art[i] = color; // Update ASCII art colors too
+                theme.ascii_art[i] = color;
             }
         }
     }
 
-    // Parse base colors
     if (parser.findSection("colors")) {
         if (parser.findKey("white")) |_| {
             const color_str = parser.parseString() catch "";
@@ -272,13 +475,12 @@ pub fn loadTheme(allocator: std.mem.Allocator, file_path: []const u8) !Theme {
         }
     }
 
-    // Parse UI element colors with color variable reference resolution
     if (parser.findSection("ui")) {
         if (parser.findKey("selected_menu_item")) |_| {
             const color_ref = parser.parseString() catch "";
             theme.selected_menu_item = parser.resolveColorReference(color_ref, &theme);
         } else {
-            theme.selected_menu_item = theme.gradient[0]; // Update default after gradient parsing
+            theme.selected_menu_item = theme.gradient[0];
         }
         
         if (parser.findKey("unselected_menu_item")) |_| {
@@ -320,14 +522,14 @@ pub fn loadTheme(allocator: std.mem.Allocator, file_path: []const u8) !Theme {
             const color_ref = parser.parseString() catch "";
             theme.selector_option = parser.resolveColorReference(color_ref, &theme);
         } else {
-            theme.selector_option = theme.gradient[3]; // Second lightest
+            theme.selector_option = theme.gradient[3];
         }
         
         if (parser.findKey("selector_selected_option")) |_| {
             const color_ref = parser.parseString() catch "";
             theme.selector_selected_option = parser.resolveColorReference(color_ref, &theme);
         } else {
-            theme.selector_selected_option = theme.gradient[3]; // Second lightest
+            theme.selector_selected_option = theme.gradient[3];
         }
         
         if (parser.findKey("border")) |_| {
@@ -339,10 +541,4 @@ pub fn loadTheme(allocator: std.mem.Allocator, file_path: []const u8) !Theme {
     }
 
     return theme;
-}
-
-// Fallback function - should only be used if theme file fails to load
-pub fn createDefaultTheme(allocator: std.mem.Allocator) !Theme {
-    _ = allocator;
-    return Theme.init();
 }
