@@ -2,6 +2,7 @@
 [menu]
 title = "Nocturne Main Menu"
 description = "Nocturne desktop environment management"
+shell = "bash"
 
 # ASCII Art Configuration (max 8 rows)
 ascii_art = [
@@ -55,6 +56,12 @@ type = "action"
 name = "Install Themes"
 description = "Install Nocturne theme packages"
 command = "echo 'Installing themes...'"
+
+[menu.install.execute]
+type = "action"
+name = "execute installation"
+description = "Execute the installer based on all configured options"
+command = "/home/adary/work/nocturne-tui/config/one.sh"
 
 [menu.configuration]
 type = "submenu"
@@ -122,9 +129,9 @@ description = "Network connectivity tests"
 
 [menu.network.ping.google]
 type = "action"
-name = "Ping Google"
-description = "Test connectivity to Google DNS"
-command = "ping -c 4 8.8.8.8"
+name = "Ping Google (300 times)"
+description = "Long-running test - press 's' to show/hide output"
+command = "ping -c 30 8.8.8.8"
 
 [menu.network.ping.gateway]
 type = "action"
@@ -132,8 +139,26 @@ name = "Ping Gateway"
 description = "Test connectivity to local gateway"
 command = "ping -c 4 $(ip route | grep default | awk '{print $3}' | head -1)"
 
+[menu.network.test_ctrl_c]
+type = "action"
+name = "Test Ctrl+C Handling"
+description = "Test script to verify Ctrl+C stops commands properly"
+command = "./test-ctrl-c.sh"
+
+[menu.network.debug_pid]
+type = "action"
+name = "Debug PID Info"
+description = "Shows PID relationships for debugging"
+command = "./debug-pid.sh"
+
+[menu.network.simple_test]
+type = "action"
+name = "Simple Test (30s)"
+description = "Simple 30-second test for Ctrl+C"
+command = "./simple-test.sh"
+
 [menu.about]
 type = "action"
 name = "About Nocturne"
 description = ""
-command = "cat ~/.config/nocturne/data/disclaimer"
+command = "cat ~/.config/nwizard/data/disclaimer"

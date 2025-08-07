@@ -1,36 +1,23 @@
-# Nocturne TUI
+# nwizard
 
-[![Build Status](https://github.com/adaryorg/nocturne/actions/workflows/build.yml/badge.svg)](https://github.com/adaryorg/nocturne/actions/workflows/build.yml)
-[![Release](https://github.com/adaryorg/nocturne/actions/workflows/release.yml/badge.svg)](https://github.com/adaryorg/nocturne/actions/workflows/release.yml)
-[![License](https://img.shields.io/github/license/adaryorg/nocturne)](LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/adaryorg/nocturne)](https://github.com/adaryorg/nocturne/releases/latest)
+[![Build Status](https://github.com/adaryorg/nwizard/actions/workflows/build.yml/badge.svg)](https://github.com/adaryorg/nocturne/actions/workflows/build.yml)
+[![Release](https://github.com/adaryorg/nwizard/actions/workflows/release.yml/badge.svg)](https://github.com/adaryorg/nocturne/actions/workflows/release.yml)
+[![License](https://img.shields.io/github/license/adaryorg/nwizard)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/adaryorg/nwizard)](https://github.com/adaryorg/nwizard/releases/latest)
 
-A powerful Terminal User Interface (TUI) application for managing the Nocturne desktop environment. Nocturne TUI provides a menu-driven interface for installation, configuration, and maintenance of all Nocturne ecosystem components.
+A powerful Terminal User Interface (TUI) application for managing the Nocturne desktop environment. Nwizard TUI provides a menu-driven interface for installation, configuration, and maintenance of all Nocturne ecosystem components.
 
-```
- ███▄    █  ▒█████   ▄████▄  ▄▄▄█████▓ █    ██  ██▀███   ███▄    █ ▓█████ 
- ██ ▀█   █ ▒██▒  ██▒▒██▀ ▀█  ▓  ██▒ ▓▒ ██  ▓██▒▓██ ▒ ██▒ ██ ▀█   █ ▓█   ▀ 
-▓██  ▀█ ██▒▒██░  ██▒▒▓█    ▄ ▒ ▓██░ ▒░▓██  ▒██░▓██ ░▄█ ▒▓██  ▀█ ██▒▒███   
-▓██▒  ▐▌██▒▒██   ██░▒▓▓▄ ▄██▒░ ▓██▓ ░ ▓▓█  ░██░▒██▀▀█▄  ▓██▒  ▐▌██▒▒▓█  ▄ 
-▒██░   ▓██░░ ████▓▒░▒ ▓███▀ ░  ▒██▒ ░ ▒▒█████▓ ░██▓ ▒██▒▒██░   ▓██░░▒████▒
-░ ▒░   ▒ ▒ ░ ▒░▒░▒░ ░ ░▒ ▒  ░  ▒ ░░   ░▒▓▒ ▒ ▒ ░ ▒▓ ░▒▓░░ ▒░   ▒ ▒ ░░ ▒░ ░
-░ ░░   ░ ▒░  ░ ▒ ▒░   ░  ▒       ░    ░░▒░ ░ ░   ░▒ ░ ▒░░ ░░   ░ ▒░ ░ ░  ░
-   ░   ░ ░ ░ ░ ░ ▒  ░          ░       ░░░ ░ ░   ░░   ░    ░   ░ ░    ░   
-         ░     ░ ░  ░ ░                  ░        ░              ░    ░  ░
-                    ░                                                      
-```
+## Features
 
-## 🚀 Features
+- ** Menu-Driven Interface**: Intuitive navigation through Nocturne components
+- ** Real-Time Command Execution**: Live output streaming with responsive UI
+- ** Secure Sudo Management**: Background authentication with automatic renewal
+- ** Customizable Themes**: TOML-based theme configuration
+- ** Installation Management**: Track and configure component installations
+- ** Development Mode**: `--no-sudo` flag for testing without privileges
+- ** Version Tracking**: Build-time version info from git commits and tags
 
-- **📋 Menu-Driven Interface**: Intuitive navigation through Nocturne components
-- **⚡ Real-Time Command Execution**: Live output streaming with responsive UI  
-- **🔐 Secure Sudo Management**: Background authentication with automatic renewal
-- **🎨 Customizable Themes**: TOML-based theme configuration
-- **📦 Installation Management**: Track and configure component installations
-- **🔧 Development Mode**: `--no-sudo` flag for testing without privileges
-- **📊 Version Tracking**: Build-time version info from git commits and tags
-
-## 📦 Installation
+## Installation
 
 ### Download Pre-built Binary
 
@@ -46,67 +33,43 @@ sudo mv nocturne /usr/local/bin/
 ### Build from Source
 
 #### Prerequisites
+
 - **Zig 0.14.1+**: [Install Zig](https://ziglang.org/download/)
 - **Git**: For version information during build
 - **Linux**: Currently Linux-only (Ubuntu, Arch, etc.)
 
 #### Build Steps
+
 ```bash
 # Clone the repository
-git clone https://github.com/adaryorg/nocturne.git
-cd nocturne
+git clone https://github.com/adaryorg/nwizard.git
+cd nwizard
 
 # Build the project
 zig build
 
 # Install (optional)
-sudo cp zig-out/bin/nocturne /usr/local/bin/
+sudo cp zig-out/bin/nwizard /usr/local/bin/
 ```
-
-## 🖥️ Usage
-
-### Basic Usage
-
-```bash
-# Run with sudo authentication (default)
-nocturne
-
-# Run without sudo (for testing/development)
-nocturne --no-sudo
-
-# Show version information
-nocturne --version
-
-# Show help
-nocturne --help
-```
-
-### Command Line Options
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--version` | `-v` | Show version, commit hash, and build time |
-| `--help` | `-h` | Display usage information |
-| `--no-sudo` | `-n` | Skip sudo authentication (testing mode) |
 
 ### Navigation
 
-| Key | Action |
-|-----|--------|
-| **↑/↓** | Navigate menu items |
-| **Enter** | Execute command or enter submenu |
-| **Escape** | Go back or exit |
-| **←/→** | Navigate submenus intuitively |
-| **Page Up/Down** | Scroll command output |
-| **Ctrl+C** | Kill running command or exit |
-| **q** | Quick exit |
+| Key              | Action                           |
+| ---------------- | -------------------------------- |
+| **↑/↓**          | Navigate menu items              |
+| **Enter**        | Execute command or enter submenu |
+| **Escape**       | Go back or exit                  |
+| **←/→**          | Navigate submenus intuitively    |
+| **Page Up/Down** | Scroll command output            |
+| **Ctrl+C**       | Kill running command or exit     |
+| **q**            | Quick exit                       |
 
-## ⚙️ Configuration
+## Configuration
 
 ### Directory Structure
 
 ```
-~/.config/nocturne/
+~/.config/nwizard/
 ├── menu.toml      # Menu configuration (required)
 ├── theme.toml     # Theme customization (optional)
 └── install.toml   # Installation selections (auto-generated)
@@ -132,7 +95,7 @@ description = "Install the Nocturne window compositor"
 command = "./scripts/install_compositor.sh"
 
 [menu.configuration]
-type = "submenu" 
+type = "submenu"
 name = "Configuration"
 description = "Configure Nocturne settings"
 
@@ -158,12 +121,12 @@ enabled = true
 max_height = 8
 ```
 
-## 🛠️ Development
+## Development
 
 ### Project Structure
 
 ```
-nocturne/
+nwizard/
 ├── src/
 │   ├── main.zig          # Main application and event loop
 │   ├── menu.zig          # Menu system and navigation
@@ -177,39 +140,6 @@ nocturne/
 ├── build.zig.zon        # Dependencies
 └── WORKFLOW.md          # Git workflow documentation
 ```
-
-### Building
-
-```bash
-# Debug build
-zig build
-
-# Release build  
-zig build -Doptimize=ReleaseFast
-
-# Run directly
-zig build run
-
-# Run with arguments
-zig build run -- --no-sudo
-```
-
-### Testing
-
-```bash
-# Test basic functionality
-./zig-out/bin/nocturne --version
-./zig-out/bin/nocturne --help
-./zig-out/bin/nocturne --no-sudo  # Quick exit test
-```
-
-## 🔄 Git Workflow
-
-This project follows a **dev → main → release** branching strategy:
-
-- **`dev`**: Active development and feature work
-- **`main`**: Stable, tested code ready for release  
-- **`release`**: Production releases with official tags
 
 ### Contributing
 
@@ -225,7 +155,7 @@ This project follows a **dev → main → release** branching strategy:
 
 See [WORKFLOW.md](WORKFLOW.md) for complete development guidelines.
 
-## 🏗️ Architecture
+## Architecture
 
 ### Key Components
 
@@ -242,33 +172,10 @@ See [WORKFLOW.md](WORKFLOW.md) for complete development guidelines.
 - **1024-byte I/O chunks** for optimal performance
 - **Non-blocking UI** during command execution
 
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Terminal Access Error (ENXIO)**:
-```bash
-Error: Unable to access /dev/tty (errno: 6 - ENXIO)
-```
-**Solutions**:
-- Run in a fresh terminal window
-- Restart terminal session after sudo usage
-- Avoid running in IDE consoles
-- Use native terminals (xterm, gnome-terminal)
-
-**Build Errors**:
-- Ensure Zig 0.14.1+ is installed
-- Check git is available for version info
-- Verify all dependencies in `build.zig.zon`
-
-**Memory Issues**:
-- The application was extensively debugged for memory leaks
-- Report any new memory issues with reproduction steps
-
-## 📊 Project Status
+## Project Status
 
 - ✅ **Core TUI Framework**: Complete with vaxis integration
-- ✅ **Menu System**: Hierarchical TOML-based configuration  
+- ✅ **Menu System**: Hierarchical TOML-based configuration
 - ✅ **Command Execution**: Async with real-time output
 - ✅ **Sudo Management**: Background authentication renewal
 - ✅ **CI/CD Pipeline**: Automated builds and releases
@@ -277,7 +184,7 @@ Error: Unable to access /dev/tty (errno: 6 - ENXIO)
 - 🚧 **Installation Scripts**: Component-specific installers
 - 🚧 **Theme System**: Advanced customization options
 
-## 🗺️ Roadmap
+## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for detailed development plans:
 
@@ -292,7 +199,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed development plans:
 We welcome contributions! Please see our [contributing guidelines](WORKFLOW.md) and:
 
 - 🐛 **Report bugs** via GitHub Issues
-- 💡 **Suggest features** via GitHub Discussions  
+- 💡 **Suggest features** via GitHub Discussions
 - 🔧 **Submit pull requests** following our workflow
 - 📚 **Improve documentation** and examples
 - 🧪 **Add tests** for new functionality
@@ -316,4 +223,4 @@ This project is licensed under the [MIT License](LICENSE) - see the LICENSE file
 
 ---
 
-**Nocturne TUI** - Simplifying desktop environment management through intuitive terminal interfaces.
+**nwizard TUI** - Simplifying desktop environment management through intuitive terminal interfaces.
