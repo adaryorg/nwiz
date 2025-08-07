@@ -617,8 +617,9 @@ pub const MenuRenderer = struct {
             else 
                 0;
 
-            // Draw ASCII art with theme gradient colors
-            for (ascii_lines, 0..) |line, i| {
+            // Draw ASCII art with theme gradient colors (max 10 lines)
+            const max_lines = @min(ascii_lines.len, 10);
+            for (ascii_lines[0..max_lines], 0..) |line, i| {
                 const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColor();
                 const ascii_win = inner_win.child(.{
                     .x_off = @intCast(center_x),

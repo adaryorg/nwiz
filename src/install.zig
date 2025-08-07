@@ -4,9 +4,6 @@
 const std = @import("std");
 
 pub const InstallConfig = struct {
-    // Store key-value pairs where key is install_key and value is either:
-    // - Single string for selectors
-    // - Array of strings for multiple selections
     selections: std.HashMap([]const u8, SelectionValue, std.hash_map.StringContext, std.hash_map.default_max_load_percentage),
     allocator: std.mem.Allocator,
 
@@ -51,7 +48,6 @@ pub const InstallConfig = struct {
         
         const result = try self.selections.getOrPut(key_copy);
         if (result.found_existing) {
-            // Free old key and value
             self.allocator.free(result.key_ptr.*);
             result.value_ptr.deinit(self.allocator);
             result.key_ptr.* = key_copy;
@@ -68,36 +64,14 @@ pub const InstallConfig = struct {
         
         const result = try self.selections.getOrPut(key_copy);
         if (result.found_existing) {
-            // Free old key and value
             self.allocator.free(result.key_ptr.*);
             result.value_ptr.deinit(self.allocator);
             result.key_ptr.* = key_copy;
         }
         result.value_ptr.* = SelectionValue{ .multiple = values_copy };
     }
-
-    pub fn getSingleSelection(self: *const Self, key: []const u8) ?[]const u8 {
-        if (self.selections.get(key)) |value| {
-            switch (value) {
-                .single => |val| return val,
-                .multiple => return null, // Wrong type
-            }
-        }
-        return null;
-    }
-
-    pub fn getMultipleSelection(self: *const Self, key: []const u8) ?[][]const u8 {
-        if (self.selections.get(key)) |value| {
-            switch (value) {
-                .single => return null, // Wrong type
-                .multiple => |vals| return vals,
-            }
-        }
-        return null;
-    }
 };
 
-// Simple TOML parser for install configuration
 pub const InstallTomlParser = struct {
     content: []const u8,
     pos: usize = 0,
@@ -118,7 +92,6 @@ pub const InstallTomlParser = struct {
             if (ch == ' ' or ch == '\t' or ch == '\n' or ch == '\r') {
                 self.pos += 1;
             } else if (ch == '#') {
-                // Skip comment line
                 while (self.pos < self.content.len and self.content[self.pos] != '\n') {
                     self.pos += 1;
                 }
@@ -133,7 +106,7 @@ pub const InstallTomlParser = struct {
         if (self.pos >= self.content.len or self.content[self.pos] != '"') {
             return error.InvalidFormat;
         }
-        self.pos += 1; // Skip opening quote
+        self.pos += 1;
 
         const start = self.pos;
         while (self.pos < self.content.len and self.content[self.pos] != '"') {
@@ -144,8 +117,8 @@ pub const InstallTomlParser = struct {
         }
 
         const result = self.content[start..self.pos];
-        self.pos += 1; // Skip closing quote
-        return result; // Return slice, don't allocate
+        self.pos += 1;
+        return result;
     }
 
     fn parseArray(self: *Self) ![][]const u8 {
@@ -153,7 +126,7 @@ pub const InstallTomlParser = struct {
         if (self.pos >= self.content.len or self.content[self.pos] != '[') {
             return error.InvalidFormat;
         }
-        self.pos += 1; // Skip opening bracket
+        self.pos += 1;
 
         var items = std.ArrayList([]const u8).init(self.allocator);
         defer items.deinit();
@@ -185,7 +158,6 @@ pub const InstallTomlParser = struct {
         while (self.pos < self.content.len) {
             const line_start = self.pos;
             
-            // Find end of line
             while (self.pos < self.content.len and self.content[self.pos] != '\n') {
                 self.pos += 1;
             }
@@ -200,7 +172,7 @@ pub const InstallTomlParser = struct {
             }
             
             if (self.pos < self.content.len) {
-                self.pos += 1; // Skip newline
+                self.pos += 1;
             }
         }
         self.pos = start_pos;
@@ -209,11 +181,9 @@ pub const InstallTomlParser = struct {
 };
 
 pub fn loadInstallConfig(allocator: std.mem.Allocator, file_path: []const u8) !InstallConfig {
-    // Try to read the install file
     const file_content = std.fs.cwd().readFileAlloc(allocator, file_path, 1024 * 1024) catch |err| {
         switch (err) {
             error.FileNotFound => {
-                // Create empty config if file doesn't exist
                 return InstallConfig.init(allocator);
             },
             else => {
@@ -227,7 +197,6 @@ pub fn loadInstallConfig(allocator: std.mem.Allocator, file_path: []const u8) !I
     var parser = InstallTomlParser.init(allocator, file_content);
     var config = InstallConfig.init(allocator);
 
-    // Parse all key-value pairs in the file
     var lines = std.mem.splitScalar(u8, file_content, '\n');
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
@@ -239,20 +208,16 @@ pub fn loadInstallConfig(allocator: std.mem.Allocator, file_path: []const u8) !I
             
             if (value_part.len > 0) {
                 if (value_part[0] == '[') {
-                    // Array value - multiple selection
                     parser.pos = @intCast(@intFromPtr(value_part.ptr) - @intFromPtr(file_content.ptr));
                     const values = parser.parseArray() catch continue;
                     config.setMultipleSelection(key, values) catch {
-                        // Free values on error
                         for (values) |val| allocator.free(val);
                         allocator.free(values);
                         continue;
                     };
-                    // Free the original values array since setMultipleSelection makes copies
                     for (values) |val| allocator.free(val);
                     allocator.free(values);
                 } else if (value_part[0] == '"') {
-                    // String value - single selection
                     parser.pos = @intCast(@intFromPtr(value_part.ptr) - @intFromPtr(file_content.ptr));
                     const value = parser.parseString() catch continue;
                     config.setSingleSelection(key, value) catch {};
@@ -262,6 +227,157 @@ pub fn loadInstallConfig(allocator: std.mem.Allocator, file_path: []const u8) !I
     }
 
     return config;
+}
+
+pub fn createInstallConfigFromMenu(allocator: std.mem.Allocator, menu_config: *const @import("menu.zig").MenuConfig) !InstallConfig {
+    var install_config = InstallConfig.init(allocator);
+    
+    // Iterate through all menu items and extract those with install_key
+    var menu_iterator = menu_config.items.iterator();
+    while (menu_iterator.next()) |entry| {
+        const item = entry.value_ptr;
+        
+        // Check for either install_key or variable_name - both should be saved to install.toml
+        const key_name = item.install_key orelse item.variable_name;
+        if (key_name) |key| {
+            // Convert key to lowercase for consistency
+            var lowercase_key = try allocator.alloc(u8, key.len);
+            defer allocator.free(lowercase_key);
+            for (key, 0..) |c, i| {
+                lowercase_key[i] = std.ascii.toLower(c);
+            }
+            
+            switch (item.type) {
+                .multiple_selection => {
+                    // Use multiple_defaults if available, otherwise empty array
+                    if (item.multiple_defaults) |defaults| {
+                        try install_config.setMultipleSelection(lowercase_key, defaults);
+                    } else {
+                        // Create empty array for multiple selection
+                        const empty_array = try allocator.alloc([]const u8, 0);
+                        try install_config.setMultipleSelection(lowercase_key, empty_array);
+                    }
+                },
+                .selector => {
+                    // Use default_value if available, otherwise first option, otherwise empty string
+                    var default_val: []const u8 = "";
+                    if (item.default_value) |def_val| {
+                        default_val = def_val;
+                    } else if (item.options) |options| {
+                        if (options.len > 0) {
+                            default_val = options[0];
+                        }
+                    }
+                    try install_config.setSingleSelection(lowercase_key, default_val);
+                },
+                else => {
+                    // For other types, just create an empty single selection
+                    try install_config.setSingleSelection(lowercase_key, "");
+                }
+            }
+        }
+    }
+    
+    return install_config;
+}
+
+pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, menu_config: *const @import("menu.zig").MenuConfig) !bool {
+    // Get all install_key values from menu
+    var expected_keys = std.ArrayList([]const u8).init(install_config.allocator);
+    defer expected_keys.deinit();
+    
+    var menu_iterator = menu_config.items.iterator();
+    while (menu_iterator.next()) |entry| {
+        const item = entry.value_ptr;
+        // Check for either install_key or variable_name
+        const key_name = item.install_key orelse item.variable_name;
+        if (key_name) |key| {
+            // Convert to lowercase for consistency
+            var lowercase_key = try install_config.allocator.alloc(u8, key.len);
+            defer install_config.allocator.free(lowercase_key);
+            for (key, 0..) |c, i| {
+                lowercase_key[i] = std.ascii.toLower(c);
+            }
+            try expected_keys.append(try install_config.allocator.dupe(u8, lowercase_key));
+        }
+    }
+    defer {
+        for (expected_keys.items) |key| {
+            install_config.allocator.free(key);
+        }
+    }
+    
+    // Check if install.toml has keys that aren't in menu
+    var install_iterator = install_config.selections.iterator();
+    while (install_iterator.next()) |entry| {
+        const install_key = entry.key_ptr.*;
+        var found = false;
+        for (expected_keys.items) |expected_key| {
+            if (std.mem.eql(u8, install_key, expected_key)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            std.debug.print("Error: install.toml contains key '{s}' which doesn't match any install_key or variable in current menu.toml\n", .{install_key});
+            std.debug.print("This suggests install.toml is from a different menu configuration.\n", .{});
+            return false;
+        }
+    }
+    
+    // Check if menu has keys that aren't in install.toml
+    for (expected_keys.items) |expected_key| {
+        if (!install_config.selections.contains(expected_key)) {
+            std.debug.print("Error: menu.toml contains install_key/variable '{s}' which is not found in install.toml\n", .{expected_key});
+            std.debug.print("install.toml may be outdated or corrupted.\n", .{});
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+pub fn updateInstallConfigWithMenuDefaults(install_config: *InstallConfig, menu_config: *const @import("menu.zig").MenuConfig) !void {
+    var menu_iterator = menu_config.items.iterator();
+    while (menu_iterator.next()) |entry| {
+        const item = entry.value_ptr;
+        
+        // Check for either install_key or variable_name
+        const key_name = item.install_key orelse item.variable_name;
+        if (key_name) |key| {
+            // Convert key to lowercase for consistency
+            var lowercase_key = try install_config.allocator.alloc(u8, key.len);
+            defer install_config.allocator.free(lowercase_key);
+            for (key, 0..) |c, i| {
+                lowercase_key[i] = std.ascii.toLower(c);
+            }
+            
+            switch (item.type) {
+                .multiple_selection => {
+                    if (item.multiple_defaults) |defaults| {
+                        try install_config.setMultipleSelection(lowercase_key, defaults);
+                    } else {
+                        const empty_array = try install_config.allocator.alloc([]const u8, 0);
+                        try install_config.setMultipleSelection(lowercase_key, empty_array);
+                    }
+                },
+                .selector => {
+                    var default_val: []const u8 = "";
+                    if (item.default_value) |def_val| {
+                        default_val = def_val;
+                    } else if (item.options) |options| {
+                        if (options.len > 0) {
+                            default_val = options[0];
+                        }
+                    }
+                    try install_config.setSingleSelection(lowercase_key, default_val);
+                },
+                else => {
+                    try install_config.setSingleSelection(lowercase_key, "");
+                }
+            }
+        }
+    }
 }
 
 pub fn saveInstallConfig(config: *const InstallConfig, file_path: []const u8) !void {
