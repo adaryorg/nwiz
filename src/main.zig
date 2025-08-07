@@ -682,7 +682,7 @@ pub fn main() !void {
                                             std.debug.print("Failed to start command: {}\n", .{err});
                                             continue;
                                         };
-                                        async_output_viewer = executor.AsyncOutputViewer.init(allocator, &async_command_executor, command_copy, &app_theme);
+                                        async_output_viewer = executor.AsyncOutputViewer.init(allocator, &async_command_executor, command_copy, &app_theme, menu_state.config.ascii_art);
                                         app_state = .viewing_output;
                                     } else {
                                         const entered = menu_state.enterSubmenu() catch false;

@@ -306,10 +306,11 @@ pub const AsyncOutputViewer = struct {
     show_output: bool = false,
     spinner_frame: usize = 0,
     last_update_time: i64 = 0,
+    ascii_art: [][]const u8,
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, app_theme: *const theme.Theme) Self {
+    pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, app_theme: *const theme.Theme, ascii_art: [][]const u8) Self {
         return Self{
             .async_executor = async_executor,
             .allocator = allocator,
@@ -317,6 +318,7 @@ pub const AsyncOutputViewer = struct {
             .command_was_running = async_executor.isRunning(),
             .command = command,
             .theme = app_theme,
+            .ascii_art = ascii_art,
         };
     }
 
@@ -381,49 +383,46 @@ pub const AsyncOutputViewer = struct {
 
         var row: usize = 0;
 
-        // Include the same ASCII art header as in menu
-        const ascii_lines = [_][]const u8{
-            "███    ██  ██████   ██████ ████████ ██    ██ ██████  ███    ██ ███████ ",
-            "████   ██ ██    ██ ██         ██    ██    ██ ██   ██ ████   ██ ██      ",
-            "██ ██  ██ ██    ██ ██         ██    ██    ██ ██████  ██ ██  ██ █████   ",
-            "██  ██ ██ ██    ██ ██         ██    ██    ██ ██   ██ ██  ██ ██ ██      ",
-            "██   ████  ██████   ██████    ██     ██████  ██   ██ ██   ████ ███████ ",
-        };
+        // Get ASCII art from config
+        const ascii_lines = self.ascii_art;
 
-        // Calculate ASCII art centering
-        var ascii_width: usize = 0;
-        for (ascii_lines) |line| {
-            var char_count: usize = 0;
-            var iter = std.unicode.Utf8Iterator{ .bytes = line, .i = 0 };
-            while (iter.nextCodepoint()) |_| {
-                char_count += 1;
+        // Only render ASCII art if it exists
+        if (ascii_lines.len > 0) {
+            // Calculate ASCII art centering
+            var ascii_width: usize = 0;
+            for (ascii_lines) |line| {
+                var char_count: usize = 0;
+                var iter = std.unicode.Utf8Iterator{ .bytes = line, .i = 0 };
+                while (iter.nextCodepoint()) |_| {
+                    char_count += 1;
+                }
+                if (char_count > ascii_width) {
+                    ascii_width = char_count;
+                }
             }
-            if (char_count > ascii_width) {
-                ascii_width = char_count;
+
+            const center_x: usize = if (inner_win.width >= ascii_width) 
+                (inner_win.width - ascii_width) / 2
+            else 
+                0;
+
+            // Draw ASCII art header with theme colors
+            for (ascii_lines, 0..) |line, i| {
+                const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColor();
+                const ascii_win = inner_win.child(.{
+                    .x_off = @intCast(center_x),
+                    .y_off = @intCast(row),
+                });
+                const segment = vaxis.Segment{ 
+                    .text = line,
+                    .style = .{ .fg = color }
+                };
+                _ = ascii_win.printSegment(segment, .{ .row_offset = 0 });
+                row += 1;
             }
-        }
 
-        const center_x: usize = if (inner_win.width >= ascii_width) 
-            (inner_win.width - ascii_width) / 2
-        else 
-            0;
-
-        // Draw ASCII art header with theme colors
-        for (ascii_lines, 0..) |line, i| {
-            const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColor();
-            const ascii_win = inner_win.child(.{
-                .x_off = @intCast(center_x),
-                .y_off = @intCast(row),
-            });
-            const segment = vaxis.Segment{ 
-                .text = line,
-                .style = .{ .fg = color }
-            };
-            _ = ascii_win.printSegment(segment, .{ .row_offset = 0 });
-            row += 1;
-        }
-
-        row += 1; // Add spacing after ASCII art
+            row += 1; // Add spacing after ASCII art
+        } // End of ASCII art rendering
 
         // Add title with command and status indicator
         const title_style = vaxis.Style{ 
@@ -838,7 +837,7 @@ pub const OutputViewer = struct {
     pub fn render(self: *Self, win: vaxis.Window) void {
         win.clear();
 
-        const border_style = vaxis.Style{ .fg = self.theme.border.toVaxisColor() };
+        const border_style = vaxis.Style{ .fg = .{ .rgb = .{ 0xcc, 0xcc, 0xcc } } }; // Default light grey - OutputViewer is legacy
         const output_win = win.child(.{
             .border = .{
                 .where = .all,
@@ -855,53 +854,12 @@ pub const OutputViewer = struct {
 
         var row: usize = 0;
 
-        // Include the same ASCII art header as in menu
-        const ascii_lines = [_][]const u8{
-            "███    ██  ██████   ██████ ████████ ██    ██ ██████  ███    ██ ███████ ",
-            "████   ██ ██    ██ ██         ██    ██    ██ ██   ██ ████   ██ ██      ",
-            "██ ██  ██ ██    ██ ██         ██    ██    ██ ██████  ██ ██  ██ █████   ",
-            "██  ██ ██ ██    ██ ██         ██    ██    ██ ██   ██ ██  ██ ██ ██      ",
-            "██   ████  ██████   ██████    ██     ██████  ██   ██ ██   ████ ███████ ",
-        };
-
-        // Calculate ASCII art centering
-        var ascii_width: usize = 0;
-        for (ascii_lines) |line| {
-            var char_count: usize = 0;
-            var iter = std.unicode.Utf8Iterator{ .bytes = line, .i = 0 };
-            while (iter.nextCodepoint()) |_| {
-                char_count += 1;
-            }
-            if (char_count > ascii_width) {
-                ascii_width = char_count;
-            }
-        }
-
-        const center_x: usize = if (inner_win.width >= ascii_width) 
-            (inner_win.width - ascii_width) / 2
-        else 
-            0;
-
-        // Draw ASCII art header with theme colors
-        for (ascii_lines, 0..) |line, i| {
-            const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColor();
-            const ascii_win = inner_win.child(.{
-                .x_off = @intCast(center_x),
-                .y_off = @intCast(row),
-            });
-            const segment = vaxis.Segment{ 
-                .text = line,
-                .style = .{ .fg = color }
-            };
-            _ = ascii_win.printSegment(segment, .{ .row_offset = 0 });
-            row += 1;
-        }
-
-        row += 1; // Add spacing after ASCII art
+        // ASCII art removed - OutputViewer is legacy code and should not display ASCII art
+        // ASCII art should only come from config via AsyncOutputViewer
 
         // Add command title with status
         const title_style = vaxis.Style{ 
-            .fg = self.theme.menu_header.toVaxisColor(),
+            .fg = .{ .rgb = .{ 0x80, 0x50, 0xcd } }, // Default purple color
             .bold = true 
         };
         
@@ -940,7 +898,7 @@ pub const OutputViewer = struct {
         const output_text = if (self.result.output.len > 0) self.result.output else "No output";
         
         // Split output into lines and handle word wrapping
-        const output_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
+        const output_style = vaxis.Style{ .fg = .{ .rgb = .{ 0xff, 0xff, 0xff } } }; // Default white - OutputViewer is legacy
         
         var wrapped_lines = std.ArrayList([]const u8).init(std.heap.page_allocator);
         defer wrapped_lines.deinit();
@@ -1040,7 +998,7 @@ pub const OutputViewer = struct {
         }
 
         const help_row = output_win.height -| 1;
-        const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColor() };
+        const help_style = vaxis.Style{ .fg = .{ .rgb = .{ 0x66, 0x66, 0x66 } } }; // Default dark grey - OutputViewer is legacy
         const help_segment = vaxis.Segment{
             .text = "↑/↓: Scroll | PgUp/PgDn: Page | Esc: Back to menu",
             .style = help_style,
