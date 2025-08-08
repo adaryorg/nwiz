@@ -237,9 +237,11 @@ pub fn createInstallConfigFromMenu(allocator: std.mem.Allocator, menu_config: *c
     while (menu_iterator.next()) |entry| {
         const item = entry.value_ptr;
         
-        // Check for either install_key or variable_name - both should be saved to install.toml
-        const key_name = item.install_key orelse item.variable_name;
-        if (key_name) |key| {
+        // Save all selector and multiple_selection items to install.toml
+        if (item.type == .selector or item.type == .multiple_selection) {
+            // Use install_key if available, otherwise use item ID
+            const key_name = item.install_key orelse item.id;
+            const key = key_name;
             // Convert key to lowercase for consistency
             var lowercase_key = try allocator.alloc(u8, key.len);
             defer allocator.free(lowercase_key);
@@ -289,9 +291,10 @@ pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, me
     var menu_iterator = menu_config.items.iterator();
     while (menu_iterator.next()) |entry| {
         const item = entry.value_ptr;
-        // Check for either install_key or variable_name
-        const key_name = item.install_key orelse item.variable_name;
-        if (key_name) |key| {
+        // Check for install_key from selector or multiple_selection items
+        if (item.type == .selector or item.type == .multiple_selection) {
+            const key_name = item.install_key orelse item.id;
+            const key = key_name;
             // Convert to lowercase for consistency
             var lowercase_key = try install_config.allocator.alloc(u8, key.len);
             defer install_config.allocator.free(lowercase_key);
@@ -342,9 +345,10 @@ pub fn updateInstallConfigWithMenuDefaults(install_config: *InstallConfig, menu_
     while (menu_iterator.next()) |entry| {
         const item = entry.value_ptr;
         
-        // Check for either install_key or variable_name
-        const key_name = item.install_key orelse item.variable_name;
-        if (key_name) |key| {
+        // Check for install_key from selector or multiple_selection items
+        if (item.type == .selector or item.type == .multiple_selection) {
+            const key_name = item.install_key orelse item.id;
+            const key = key_name;
             // Convert key to lowercase for consistency
             var lowercase_key = try install_config.allocator.alloc(u8, key.len);
             defer install_config.allocator.free(lowercase_key);

@@ -230,7 +230,6 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
             .option_comments = null,
             .default_value = null,
             .current_value = null,
-            .variable_name = null,
             .multiple_options = null,
             .multiple_option_comments = null,
             .multiple_defaults = null,
@@ -288,8 +287,8 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
                 menu_item.current_value = if (default_val) |val| try allocator.dupe(u8, val) else null;
             }
             
-            if (item_parser.findKey("variable")) |_| {
-                menu_item.variable_name = item_parser.parseString() catch null;
+            if (item_parser.findKey("install_key")) |_| {
+                menu_item.install_key = item_parser.parseString() catch null;
             }
         }
         

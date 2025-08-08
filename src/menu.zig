@@ -27,12 +27,13 @@ pub const MenuItem = struct {
     option_comments: ?[]?[]const u8 = null, // Optional comments for each option (parallel to options array)
     default_value: ?[]const u8 = null, // Default selected value
     current_value: ?[]const u8 = null, // Currently selected value
-    variable_name: ?[]const u8 = null, // Variable name for substitution in commands
     
     // Multiple selection specific properties
     multiple_options: ?[][]const u8 = null, // Available options for multiple selection
     multiple_option_comments: ?[]?[]const u8 = null, // Optional comments for multiple selection options
     multiple_defaults: ?[][]const u8 = null, // Default selected values (multiple)
+    
+    // Unified field for both selector and multiple selection
     install_key: ?[]const u8 = null, // Key in install.toml file for storing selections
     
     // Status reporting configuration
@@ -74,9 +75,6 @@ pub const MenuItem = struct {
         }
         if (self.current_value) |val| {
             allocator.free(val);
-        }
-        if (self.variable_name) |var_name| {
-            allocator.free(var_name);
         }
         
         // Free multiple selection specific properties
@@ -323,8 +321,8 @@ pub const MenuState = struct {
         var result = try self.allocator.dupe(u8, command);
         
         for (self.current_items) |item| {
-            if (item.type == .selector and item.variable_name != null) {
-                const var_name = item.variable_name.?;
+            if (item.type == .selector and item.install_key != null) {
+                const var_name = item.install_key.?;
                 if (self.getSelectorValue(&item)) |var_value| {
                     // Create variable placeholder like ${BROWSER}
                     const placeholder = try std.fmt.allocPrint(self.allocator, "${{{s}}}", .{var_name});

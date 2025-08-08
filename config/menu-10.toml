@@ -29,6 +29,20 @@ type = "submenu"
 name = "Installation"
 description = "Install Nocturne components"
 
+[menu.editor]
+type = "selector"
+name = "Default Editor"
+description = "Choose your preferred editor"
+variable_name = "EDITOR"
+options = ["vim", "nano", "emacs"]
+default = "vim"
+
+[menu.edit]
+type = "action"
+name = "Edit Configuration"
+description = "Edit config with selected editor"
+command = "${EDITOR} config/menu.toml"
+
 [menu.install.compositor]
 type = "action"
 name = "Install Compositor"
