@@ -56,6 +56,20 @@ pub const TomlParser = struct {
         self.pos += 1;
         return try self.allocator.dupe(u8, result);
     }
+    
+    fn parseBool(self: *Self) !bool {
+        self.skipWhitespace();
+        
+        if (self.pos + 4 <= self.content.len and std.mem.eql(u8, self.content[self.pos..self.pos + 4], "true")) {
+            self.pos += 4;
+            return true;
+        } else if (self.pos + 5 <= self.content.len and std.mem.eql(u8, self.content[self.pos..self.pos + 5], "false")) {
+            self.pos += 5;
+            return false;
+        } else {
+            return error.InvalidFormat;
+        }
+    }
 
     pub fn parseArray(self: *Self) !struct { options: [][]const u8, comments: []?[]const u8 } {
         self.skipWhitespace();
@@ -241,6 +255,7 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
             .multiple_option_comments = null,
             .multiple_defaults = null,
             .install_key = null,
+            .show_output = null,
         };
 
         item_parser.reset();
@@ -288,6 +303,18 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
         item_parser.reset();
         if (item_parser.findKey("install_key")) |_| {
             menu_item.install_key = item_parser.parseString() catch null;
+        }
+        
+        // Parse show_output for action types (validation will check if it's appropriate)
+        item_parser.reset();
+        if (item_parser.findKey("show_output")) |_| {
+            menu_item.show_output = item_parser.parseBool() catch null;
+        }
+        
+        // Parse disclaimer for action types (validation will check if it's appropriate)
+        item_parser.reset();
+        if (item_parser.findKey("disclaimer")) |_| {
+            menu_item.disclaimer = item_parser.parseString() catch null;
         }
         
         if (menu_item.type == .selector) {

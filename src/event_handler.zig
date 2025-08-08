@@ -10,6 +10,7 @@ const install_integration = @import("install_integration.zig");
 const sudo = @import("sudo.zig");
 const theme = @import("theme.zig");
 const tty_compat = @import("tty_compat.zig");
+const disclaimer = @import("disclaimer.zig");
 
 pub const EventResult = enum {
     continue_running,
@@ -20,6 +21,7 @@ pub const AppState = enum {
     menu,
     viewing_output,
     exit_confirmation,
+    viewing_disclaimer,
 };
 
 pub const EventContext = struct {
@@ -35,6 +37,7 @@ pub const EventContext = struct {
     vx: *vaxis.Vaxis,
     global_shell_pid: *?std.posix.pid_t,
     global_async_executor: *?*executor.AsyncCommandExecutor,
+    disclaimer_dialog: *?disclaimer.DisclaimerDialog,
 };
 
 pub fn handleKeyPress(key: vaxis.Key, context: *EventContext) !EventResult {
@@ -48,6 +51,7 @@ pub fn handleKeyPress(key: vaxis.Key, context: *EventContext) !EventResult {
         .menu => return handleMenuKeyPress(key, context),
         .viewing_output => return handleOutputViewingKeyPress(key, context),
         .exit_confirmation => return handleExitConfirmationKeyPress(key, context),
+        .viewing_disclaimer => return handleDisclaimerViewingKeyPress(key, context),
     }
 }
 
@@ -176,18 +180,24 @@ fn handleMenuEnterKey(context: *EventContext) !EventResult {
     } else if (current_item.type == .multiple_selection) {
         _ = context.menu_state.enterMultipleSelectionMode();
     } else if (context.menu_state.getCurrentActionWithSubstitution() catch null) |command| {
-        // Start async command execution with variable substitution
         defer context.allocator.free(command); // Free the allocated command string
-        const command_copy = try context.allocator.dupe(u8, command);
-        const menu_item_name_copy = try context.allocator.dupe(u8, current_item.name);
-        context.async_command_executor.startCommand(command) catch |err| {
-            context.allocator.free(command_copy);
-            context.allocator.free(menu_item_name_copy);
-            std.debug.print("Failed to start command: {}\n", .{err});
-            return EventResult.continue_running;
-        };
-        context.async_output_viewer.* = executor.AsyncOutputViewer.init(context.allocator, context.async_command_executor, command_copy, menu_item_name_copy, context.app_theme, context.menu_state.config.ascii_art, context.terminal_mode, current_item.nwizard_status_prefix);
-        context.app_state.* = .viewing_output;
+        
+        // Check if action has a disclaimer
+        if (current_item.disclaimer) |disclaimer_path| {
+            // Use disclaimer path as-is (relative paths are relative to current working directory)
+            const resolved_disclaimer_path = try context.allocator.dupe(u8, disclaimer_path);
+            defer context.allocator.free(resolved_disclaimer_path);
+            
+            // Show disclaimer dialog
+            context.disclaimer_dialog.* = disclaimer.DisclaimerDialog.init(context.allocator, resolved_disclaimer_path, current_item.name, context.app_theme, context.terminal_mode) catch |err| {
+                std.debug.print("Failed to load disclaimer from {s}: {}\n", .{ resolved_disclaimer_path, err });
+                return EventResult.continue_running;
+            };
+            context.app_state.* = .viewing_disclaimer;
+        } else {
+            // No disclaimer, start action immediately
+            try startActionCommand(context, command, current_item);
+        }
     } else {
         const entered = context.menu_state.enterSubmenu() catch false;
         _ = entered;
@@ -283,6 +293,69 @@ fn handleExitConfirmationKeyPress(key: vaxis.Key, context: *EventContext) !Event
     } else if (key.matches(vaxis.Key.escape, .{})) {
         // Cancel exit confirmation
         context.app_state.* = if (context.async_output_viewer.* != null) .viewing_output else .menu;
+    }
+    
+    return EventResult.continue_running;
+}
+
+fn startActionCommand(context: *EventContext, command: []const u8, current_item: *const menu.MenuItem) !void {
+    const command_copy = try context.allocator.dupe(u8, command);
+    const menu_item_name_copy = try context.allocator.dupe(u8, current_item.name);
+    context.async_command_executor.startCommand(command) catch |err| {
+        context.allocator.free(command_copy);
+        context.allocator.free(menu_item_name_copy);
+        std.debug.print("Failed to start command: {}\n", .{err});
+        return;
+    };
+    context.async_output_viewer.* = executor.AsyncOutputViewer.init(context.allocator, context.async_command_executor, command_copy, menu_item_name_copy, context.app_theme, context.menu_state.config.ascii_art, context.terminal_mode, current_item.nwizard_status_prefix, current_item.show_output);
+    context.app_state.* = .viewing_output;
+}
+
+fn handleDisclaimerViewingKeyPress(key: vaxis.Key, context: *EventContext) !EventResult {
+    if (context.disclaimer_dialog.*) |*dialog| {
+        // Handle keys that don't require dialog cleanup first
+        if (key.codepoint != 'y' and key.codepoint != 'Y' and 
+            key.codepoint != 'n' and key.codepoint != 'N' and 
+            !key.matches(vaxis.Key.escape, .{})) {
+            // Just handle navigation keys
+            dialog.handleKey(key, context.vx.window().height);
+            return EventResult.continue_running;
+        }
+        
+        // Check if user made a choice to proceed or cancel
+        if (key.codepoint == 'y' or key.codepoint == 'Y') {
+            // User agreed - execute the action
+            // Get current item info before cleaning up dialog
+            if (context.menu_state.selected_index >= context.menu_state.current_items.len) {
+                // Invalid selection - clean up and return to menu
+                dialog.deinit();
+                context.disclaimer_dialog.* = null;
+                context.app_state.* = .menu;
+                return EventResult.continue_running;
+            }
+            
+            const current_item = &context.menu_state.current_items[context.menu_state.selected_index];
+            if (context.menu_state.getCurrentActionWithSubstitution() catch null) |command| {
+                defer context.allocator.free(command);
+                
+                // Clean up disclaimer dialog before starting command
+                dialog.deinit();
+                context.disclaimer_dialog.* = null;
+                
+                // Start the command
+                try startActionCommand(context, command, current_item);
+            } else {
+                // No command available - clean up and return to menu
+                dialog.deinit();
+                context.disclaimer_dialog.* = null;
+                context.app_state.* = .menu;
+            }
+        } else {
+            // User declined, cancelled, or pressed escape - return to menu
+            dialog.deinit();
+            context.disclaimer_dialog.* = null;
+            context.app_state.* = .menu;
+        }
     }
     
     return EventResult.continue_running;

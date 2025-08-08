@@ -23,6 +23,8 @@ name = "Status Demo"
 description = "Demo script with dynamic status messages"
 command = "./config/test.sh"
 nwizard_status = "[NWIZARD_STATUS]"
+show_output = false
+disclaimer = "data/disclaimer"
 
 [menu.install]
 type = "submenu"
@@ -127,8 +129,10 @@ command = "lscpu"
 [menu.system.memory]
 type = "action"
 name = "Memory Usage"
-description = "Show memory usage statistics"
+description = "Show memory usage statistics - starts with spinner"
 command = "free -h"
+show_output = false
+disclaimer = "config/simple-disclaimer.txt"
 
 [menu.system.disk]
 type = "action"
@@ -155,8 +159,9 @@ description = "Network connectivity tests"
 [menu.network.ping.google]
 type = "action"
 name = "Ping Google (300 times)"
-description = "Long-running test - press 's' to show/hide output"
+description = "Long-running test - starts with output visible"
 command = "ping -c 30 8.8.8.8"
+show_output = true
 
 [menu.network.ping.gateway]
 type = "action"

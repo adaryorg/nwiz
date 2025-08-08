@@ -25,10 +25,6 @@ pub const ExecutionResult = struct {
     error_output: []const u8,
     exit_code: u8,
 
-    pub fn deinit(self: ExecutionResult, allocator: std.mem.Allocator) void {
-        allocator.free(self.output);
-        allocator.free(self.error_output);
-    }
 };
 
 pub const AsyncCommandExecutor = struct {
@@ -272,7 +268,13 @@ pub const AsyncOutputViewer = struct {
         timestamp: i64,
     };
 
-    pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, menu_item_name: []const u8, app_theme: *const theme.Theme, ascii_art: [][]const u8, terminal_mode: tty_compat.TerminalMode, status_prefix: ?[]const u8) Self {
+    pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, menu_item_name: []const u8, app_theme: *const theme.Theme, ascii_art: [][]const u8, terminal_mode: tty_compat.TerminalMode, status_prefix: ?[]const u8, show_output_initial: ?bool) Self {
+        // Determine initial show_output state:
+        // - null: default behavior (show spinner initially)
+        // - true: start with output visible
+        // - false: start with spinner (explicit)
+        const initial_show_output = show_output_initial orelse false;
+        
         return Self{
             .async_executor = async_executor,
             .allocator = allocator,
@@ -282,6 +284,7 @@ pub const AsyncOutputViewer = struct {
             .menu_item_name = menu_item_name,
             .theme = app_theme,
             .terminal_mode = terminal_mode,
+            .show_output = initial_show_output,
             .ascii_art = ascii_art,
             .status_prefix = status_prefix,
             .status_history_buffer = std.ArrayList(u8).init(allocator),
