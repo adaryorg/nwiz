@@ -147,6 +147,55 @@ description = "Update system packages"
 command = "sudo apt update && sudo apt upgrade"
 ```
 
+Actions support optional parameters to control their behavior:
+
+**Output Display Control (`show_output`)**:
+```toml
+[menu.ping_with_output]
+type = "action"
+name = "Network Test"
+description = "Test connectivity with output visible from start"
+command = "ping -c 10 8.8.8.8"
+show_output = true
+
+[menu.ping_with_spinner]  
+type = "action"
+name = "Quick Check"
+description = "Fast command with spinner initially"
+command = "uptime"
+show_output = false
+```
+
+The `show_output` parameter behavior:
+- **Not specified**: Default behavior - starts with spinner, user can toggle with 's' key
+- **`show_output = true`**: Starts with command output visible immediately
+- **`show_output = false`**: Explicitly starts with spinner (same as default)
+
+**Disclaimer Dialog (`disclaimer`)**:
+```toml
+[menu.system.critical_operation]
+type = "action"
+name = "Critical System Operation"
+description = "Perform system-wide changes"
+command = "sudo systemctl restart networking"
+disclaimer = "disclaimers/network-restart-warning.txt"
+
+[menu.data.destructive_action]
+type = "action"
+name = "Delete Old Backups"
+description = "Remove backups older than 30 days"
+command = "./scripts/cleanup-backups.sh --days=30"
+disclaimer = "/etc/nwizard/data-deletion-disclaimer.txt"
+```
+
+The `disclaimer` parameter behavior:
+- **Not specified**: Action executes immediately when selected
+- **File path specified**: Shows disclaimer dialog before execution
+  - Path can be relative to current working directory or absolute
+  - User can proceed (Y) or cancel (N/Escape)
+  - Dialog supports scrolling for long disclaimers (Up/Down, Page Up/Page Down)
+  - File must exist and be readable (validated during linting)
+
 **Submenu Items** contain other menu items:
 
 ```toml

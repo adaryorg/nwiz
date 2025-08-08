@@ -38,6 +38,12 @@ pub const MenuItem = struct {
     
     // Status reporting configuration
     nwizard_status_prefix: ?[]const u8 = null, // Prefix for status messages from child process
+    
+    // Output display configuration for actions
+    show_output: ?bool = null, // Control initial display mode: null=default spinner, true=start with output, false=start with spinner
+    
+    // Disclaimer configuration for actions
+    disclaimer: ?[]const u8 = null, // Path to disclaimer text file to show before execution
 
     pub fn deinit(self: *MenuItem, allocator: std.mem.Allocator) void {
         // Free all allocated strings
@@ -103,6 +109,9 @@ pub const MenuItem = struct {
         }
         if (self.nwizard_status_prefix) |prefix| {
             allocator.free(prefix);
+        }
+        if (self.disclaimer) |disclaimer_path| {
+            allocator.free(disclaimer_path);
         }
     }
 };
@@ -178,6 +187,7 @@ pub const MenuConfig = struct {
 
 pub const MenuState = struct {
     config: *const MenuConfig,
+    config_file_path: []const u8,
     current_menu_id: []const u8,
     current_items: []MenuItem,
     menu_stack: std.ArrayList([]const u8),
@@ -201,10 +211,11 @@ pub const MenuState = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, config: *const MenuConfig) !Self {
+    pub fn init(allocator: std.mem.Allocator, config: *const MenuConfig, config_file_path: []const u8) !Self {
         const root_items = try config.getMenuItems(config.root_menu_id, allocator);
         return Self{
             .config = config,
+            .config_file_path = config_file_path,
             .current_menu_id = config.root_menu_id,
             .current_items = root_items,
             .menu_stack = std.ArrayList([]const u8).init(allocator),

@@ -1,7 +1,7 @@
 # Nocturne Installation Configuration
 # This file stores selection values from multiple selection and selector menu items
 
-browser = "vivaldi"
+browser = "firefox"
 theme = "nocturne"
-packages = ["neovim", "zsh", "curl"]
-editor = "emacs"
+packages = []
+editor = "vim"

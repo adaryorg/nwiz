@@ -34,20 +34,3 @@ pub fn restoreTerminalCompletely() void {
     stdout.writeAll("\n") catch {};
 }
 
-pub fn signalHandler(sig: c_int) callconv(.C) void {
-    switch (sig) {
-        std.posix.SIG.INT, std.posix.SIG.TERM => {
-            signal_exit_requested = true;
-        },
-        std.posix.SIG.WINCH => {},
-        else => {},
-    }
-    
-    if (global_vx) |vx| {
-        if (global_tty) |tty| {
-            vx.exitAltScreen(tty.anyWriter()) catch {};
-        }
-    }
-    restoreTerminalCompletely();
-    std.process.exit(0);
-}

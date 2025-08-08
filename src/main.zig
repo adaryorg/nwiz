@@ -19,6 +19,7 @@ const tty_compat = @import("tty_compat.zig");
 const app_init = @import("app_init.zig");
 const install_integration = @import("install_integration.zig");
 const event_handler = @import("event_handler.zig");
+const disclaimer = @import("disclaimer.zig");
 
 var global_async_executor: ?*executor.AsyncCommandExecutor = null;
 pub var global_shell_pid: ?std.posix.pid_t = null;
@@ -206,7 +207,7 @@ pub fn main() !void {
     const app_theme = &configs.app_theme;
 
     // Initialize menu state
-    var menu_state = menu.MenuState.init(allocator, menu_config) catch {
+    var menu_state = menu.MenuState.init(allocator, menu_config, configs.menu_config_path) catch {
         return;
     };
     defer menu_state.deinit();
@@ -241,6 +242,7 @@ pub fn main() !void {
     // Application state
     var app_state = AppState.menu;
     var async_output_viewer: ?executor.AsyncOutputViewer = null;
+    var disclaimer_dialog: ?disclaimer.DisclaimerDialog = null;
     
     // Set up event context
     var event_context = event_handler.EventContext{
@@ -256,6 +258,7 @@ pub fn main() !void {
         .vx = &vx,
         .global_shell_pid = &global_shell_pid,
         .global_async_executor = &global_async_executor,
+        .disclaimer_dialog = &disclaimer_dialog,
     };
 
     // Main event loop
@@ -298,6 +301,15 @@ pub fn main() !void {
             .viewing_output => {
                 if (async_output_viewer) |*viewer| {
                     viewer.render(win);
+                }
+            },
+            .viewing_disclaimer => {
+                // Render menu as background
+                menu_renderer.render(win, &menu_state);
+                
+                // Render disclaimer dialog on top
+                if (disclaimer_dialog) |*dialog| {
+                    try dialog.render(&vx);
                 }
             },
             .exit_confirmation => {

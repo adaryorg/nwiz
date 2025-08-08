@@ -154,150 +154,6 @@ pub const Theme = struct {
         };
     }
     
-    pub fn createGreenTheme() Theme {
-        const gradient = [10]ThemeColor{
-            ThemeColor{ .r = 0x3a, .g = 0x7b, .b = 0x4c },
-            ThemeColor{ .r = 0x4a, .g = 0x8b, .b = 0x5c },
-            ThemeColor{ .r = 0x5a, .g = 0x96, .b = 0x69 },
-            ThemeColor{ .r = 0x6b, .g = 0xa1, .b = 0x76 },
-            ThemeColor{ .r = 0x7b, .g = 0xac, .b = 0x83 },
-            ThemeColor{ .r = 0x8c, .g = 0xb7, .b = 0x90 },
-            ThemeColor{ .r = 0x9c, .g = 0xc2, .b = 0x9d },
-            ThemeColor{ .r = 0xac, .g = 0xda, .b = 0xaa },
-            ThemeColor{ .r = 0xbc, .g = 0xe5, .b = 0xb7 },
-            ThemeColor{ .r = 0xcc, .g = 0xf0, .b = 0xc4 },
-        };
-        
-        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
-        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
-        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
-        
-        return Theme{
-            .gradient = gradient,
-            .white = white,
-            .light_grey = light_grey,
-            .dark_grey = dark_grey,
-            .ascii_art = gradient,
-            .selected_menu_item = gradient[0],
-            .unselected_menu_item = light_grey,
-            .menu_header = gradient[1],
-            .footer_text = dark_grey,
-            .menu_item_comment = gradient[5],
-            .menu_description = dark_grey,
-            .selector_option = gradient[3],
-            .selector_selected_option = gradient[3],
-            .border = gradient[5],
-        };
-    }
-    
-    pub fn createBlueTheme() Theme {
-        const gradient = [10]ThemeColor{
-            ThemeColor{ .r = 0x2f, .g = 0x5f, .b = 0xb5 },
-            ThemeColor{ .r = 0x3c, .g = 0x6d, .b = 0xbe },
-            ThemeColor{ .r = 0x4a, .g = 0x7b, .b = 0xc8 },
-            ThemeColor{ .r = 0x5d, .g = 0x8b, .b = 0xce },
-            ThemeColor{ .r = 0x71, .g = 0x9b, .b = 0xd4 },
-            ThemeColor{ .r = 0x84, .g = 0xab, .b = 0xda },
-            ThemeColor{ .r = 0x98, .g = 0xbb, .b = 0xe0 },
-            ThemeColor{ .r = 0xab, .g = 0xcb, .b = 0xe6 },
-            ThemeColor{ .r = 0xbe, .g = 0xda, .b = 0xec },
-            ThemeColor{ .r = 0xd1, .g = 0xea, .b = 0xf2 },
-        };
-        
-        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
-        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
-        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
-        
-        return Theme{
-            .gradient = gradient,
-            .white = white,
-            .light_grey = light_grey,
-            .dark_grey = dark_grey,
-            .ascii_art = gradient,
-            .selected_menu_item = gradient[0],
-            .unselected_menu_item = light_grey,
-            .menu_header = gradient[1],
-            .footer_text = dark_grey,
-            .menu_item_comment = gradient[5],
-            .menu_description = dark_grey,
-            .selector_option = gradient[3],
-            .selector_selected_option = gradient[3],
-            .border = gradient[5],
-        };
-    }
-    
-    pub fn createOrangeTheme() Theme {
-        const gradient = [10]ThemeColor{
-            ThemeColor{ .r = 0xa0, .g = 0x5a, .b = 0x26 },
-            ThemeColor{ .r = 0xa9, .g = 0x66, .b = 0x31 },
-            ThemeColor{ .r = 0xb8, .g = 0x72, .b = 0x3d },
-            ThemeColor{ .r = 0xc1, .g = 0x80, .b = 0x4e },
-            ThemeColor{ .r = 0xca, .g = 0x8f, .b = 0x5f },
-            ThemeColor{ .r = 0xd3, .g = 0x9d, .b = 0x70 },
-            ThemeColor{ .r = 0xdc, .g = 0xac, .b = 0x81 },
-            ThemeColor{ .r = 0xe5, .g = 0xba, .b = 0x92 },
-            ThemeColor{ .r = 0xee, .g = 0xc9, .b = 0xa3 },
-            ThemeColor{ .r = 0xf7, .g = 0xd7, .b = 0xb4 },
-        };
-        
-        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
-        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
-        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
-        
-        return Theme{
-            .gradient = gradient,
-            .white = white,
-            .light_grey = light_grey,
-            .dark_grey = dark_grey,
-            .ascii_art = gradient,
-            .selected_menu_item = gradient[0],
-            .unselected_menu_item = light_grey,
-            .menu_header = gradient[1],
-            .footer_text = dark_grey,
-            .menu_item_comment = gradient[5],
-            .menu_description = dark_grey,
-            .selector_option = gradient[3],
-            .selector_selected_option = gradient[3],
-            .border = gradient[5],
-        };
-    }
-    
-    pub fn createRedTheme() Theme {
-        const gradient = [10]ThemeColor{
-            ThemeColor{ .r = 0xb2, .g = 0x2f, .b = 0x07 },
-            ThemeColor{ .r = 0xbd, .g = 0x3b, .b = 0x12 },
-            ThemeColor{ .r = 0xc8, .g = 0x47, .b = 0x1e },
-            ThemeColor{ .r = 0xd3, .g = 0x5b, .b = 0x35 },
-            ThemeColor{ .r = 0xde, .g = 0x6f, .b = 0x4c },
-            ThemeColor{ .r = 0xe9, .g = 0x83, .b = 0x63 },
-            ThemeColor{ .r = 0xf4, .g = 0x97, .b = 0x7a },
-            ThemeColor{ .r = 0xff, .g = 0xab, .b = 0x91 },
-            ThemeColor{ .r = 0xff, .g = 0xbf, .b = 0xa8 },
-            ThemeColor{ .r = 0xff, .g = 0xd3, .b = 0xbf },
-        };
-        
-        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
-        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
-        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
-        
-        return Theme{
-            .gradient = gradient,
-            .white = white,
-            .light_grey = light_grey,
-            .dark_grey = dark_grey,
-            .ascii_art = gradient,
-            .selected_menu_item = gradient[0],
-            .unselected_menu_item = light_grey,
-            .menu_header = gradient[1],
-            .footer_text = dark_grey,
-            .menu_item_comment = gradient[5],
-            .menu_description = dark_grey,
-            .selector_option = gradient[3],
-            .selector_selected_option = gradient[3],
-            .border = gradient[5],
-        };
-    }
-    
     pub fn createRainbowTheme() Theme {
         const gradient = [10]ThemeColor{
             // Red
@@ -421,10 +277,142 @@ pub const Theme = struct {
     pub fn createBuiltinTheme(builtin: BuiltinTheme) Theme {
         return switch (builtin) {
             .nocturne => Theme.init(),
-            .forest => Theme.createGreenTheme(),
-            .water => Theme.createBlueTheme(),
-            .nature => Theme.createOrangeTheme(),
-            .fire => Theme.createRedTheme(),
+            .forest => blk: {
+                // Green theme
+                const gradient = [10]ThemeColor{
+                    ThemeColor{ .r = 0x3a, .g = 0x7b, .b = 0x4c },
+                    ThemeColor{ .r = 0x4a, .g = 0x8b, .b = 0x5c },
+                    ThemeColor{ .r = 0x5a, .g = 0x96, .b = 0x69 },
+                    ThemeColor{ .r = 0x6b, .g = 0xa1, .b = 0x76 },
+                    ThemeColor{ .r = 0x7b, .g = 0xac, .b = 0x83 },
+                    ThemeColor{ .r = 0x8c, .g = 0xb7, .b = 0x90 },
+                    ThemeColor{ .r = 0x9c, .g = 0xc2, .b = 0x9d },
+                    ThemeColor{ .r = 0xac, .g = 0xda, .b = 0xaa },
+                    ThemeColor{ .r = 0xbc, .g = 0xe5, .b = 0xb7 },
+                    ThemeColor{ .r = 0xcc, .g = 0xf0, .b = 0xc4 },
+                };
+                const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+                const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+                const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+                break :blk Theme{
+                    .gradient = gradient,
+                    .white = white,
+                    .light_grey = light_grey,
+                    .dark_grey = dark_grey,
+                    .ascii_art = gradient,
+                    .selected_menu_item = gradient[0],
+                    .unselected_menu_item = light_grey,
+                    .menu_header = gradient[1],
+                    .footer_text = dark_grey,
+                    .menu_item_comment = gradient[5],
+                    .menu_description = dark_grey,
+                    .selector_option = gradient[3],
+                    .selector_selected_option = gradient[3],
+                    .border = gradient[5],
+                };
+            },
+            .water => blk: {
+                // Blue theme
+                const gradient = [10]ThemeColor{
+                    ThemeColor{ .r = 0x2f, .g = 0x5f, .b = 0xb5 },
+                    ThemeColor{ .r = 0x3c, .g = 0x6d, .b = 0xbe },
+                    ThemeColor{ .r = 0x4a, .g = 0x7b, .b = 0xc8 },
+                    ThemeColor{ .r = 0x5d, .g = 0x8b, .b = 0xce },
+                    ThemeColor{ .r = 0x71, .g = 0x9b, .b = 0xd4 },
+                    ThemeColor{ .r = 0x84, .g = 0xab, .b = 0xda },
+                    ThemeColor{ .r = 0x98, .g = 0xbb, .b = 0xe0 },
+                    ThemeColor{ .r = 0xab, .g = 0xcb, .b = 0xe6 },
+                    ThemeColor{ .r = 0xbe, .g = 0xda, .b = 0xec },
+                    ThemeColor{ .r = 0xd1, .g = 0xea, .b = 0xf2 },
+                };
+                const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+                const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+                const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+                break :blk Theme{
+                    .gradient = gradient,
+                    .white = white,
+                    .light_grey = light_grey,
+                    .dark_grey = dark_grey,
+                    .ascii_art = gradient,
+                    .selected_menu_item = gradient[0],
+                    .unselected_menu_item = light_grey,
+                    .menu_header = gradient[1],
+                    .footer_text = dark_grey,
+                    .menu_item_comment = gradient[5],
+                    .menu_description = dark_grey,
+                    .selector_option = gradient[3],
+                    .selector_selected_option = gradient[3],
+                    .border = gradient[5],
+                };
+            },
+            .nature => blk: {
+                // Orange theme
+                const gradient = [10]ThemeColor{
+                    ThemeColor{ .r = 0xa0, .g = 0x5a, .b = 0x26 },
+                    ThemeColor{ .r = 0xa9, .g = 0x66, .b = 0x31 },
+                    ThemeColor{ .r = 0xb8, .g = 0x72, .b = 0x3d },
+                    ThemeColor{ .r = 0xc1, .g = 0x80, .b = 0x4e },
+                    ThemeColor{ .r = 0xca, .g = 0x8f, .b = 0x5f },
+                    ThemeColor{ .r = 0xd3, .g = 0x9d, .b = 0x70 },
+                    ThemeColor{ .r = 0xdc, .g = 0xac, .b = 0x81 },
+                    ThemeColor{ .r = 0xe5, .g = 0xba, .b = 0x92 },
+                    ThemeColor{ .r = 0xee, .g = 0xc9, .b = 0xa3 },
+                    ThemeColor{ .r = 0xf7, .g = 0xd7, .b = 0xb4 },
+                };
+                const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+                const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+                const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+                break :blk Theme{
+                    .gradient = gradient,
+                    .white = white,
+                    .light_grey = light_grey,
+                    .dark_grey = dark_grey,
+                    .ascii_art = gradient,
+                    .selected_menu_item = gradient[0],
+                    .unselected_menu_item = light_grey,
+                    .menu_header = gradient[1],
+                    .footer_text = dark_grey,
+                    .menu_item_comment = gradient[5],
+                    .menu_description = dark_grey,
+                    .selector_option = gradient[3],
+                    .selector_selected_option = gradient[3],
+                    .border = gradient[5],
+                };
+            },
+            .fire => blk: {
+                // Red theme
+                const gradient = [10]ThemeColor{
+                    ThemeColor{ .r = 0xb2, .g = 0x2f, .b = 0x07 },
+                    ThemeColor{ .r = 0xbd, .g = 0x3b, .b = 0x12 },
+                    ThemeColor{ .r = 0xc8, .g = 0x47, .b = 0x1e },
+                    ThemeColor{ .r = 0xd3, .g = 0x5b, .b = 0x35 },
+                    ThemeColor{ .r = 0xde, .g = 0x6f, .b = 0x4c },
+                    ThemeColor{ .r = 0xe9, .g = 0x83, .b = 0x63 },
+                    ThemeColor{ .r = 0xf4, .g = 0x97, .b = 0x7a },
+                    ThemeColor{ .r = 0xff, .g = 0xab, .b = 0x91 },
+                    ThemeColor{ .r = 0xff, .g = 0xbf, .b = 0xa8 },
+                    ThemeColor{ .r = 0xff, .g = 0xd3, .b = 0xbf },
+                };
+                const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+                const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+                const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+                break :blk Theme{
+                    .gradient = gradient,
+                    .white = white,
+                    .light_grey = light_grey,
+                    .dark_grey = dark_grey,
+                    .ascii_art = gradient,
+                    .selected_menu_item = gradient[0],
+                    .unselected_menu_item = light_grey,
+                    .menu_header = gradient[1],
+                    .footer_text = dark_grey,
+                    .menu_item_comment = gradient[5],
+                    .menu_description = dark_grey,
+                    .selector_option = gradient[3],
+                    .selector_selected_option = gradient[3],
+                    .border = gradient[5],
+                };
+            },
             .rainbow => Theme.createRainbowTheme(),
             .greyscale => Theme.createGreyscaleTheme(),
             .high_contrast => Theme.createHighContrastTheme(),

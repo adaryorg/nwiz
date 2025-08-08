@@ -14,6 +14,8 @@ pub const AppConfig = struct {
     config_options: ?[]const u8 = null,
     lint_menu_file: ?[]const u8 = null,
     write_theme_path: ?[]const u8 = null,
+    show_theme_name: ?[]const u8 = null,
+    list_themes: bool = false,
 };
 
 pub fn printVersion() void {
@@ -40,10 +42,68 @@ pub fn printHelp() void {
     
     std.debug.print("UTILITY COMMANDS:\n", .{});
     std.debug.print("      --lint <PATH>                  Validate menu.toml file structure\n", .{});
+    std.debug.print("      --list-themes                  List available built-in theme names\n", .{});
+    std.debug.print("      --show-theme <NAME>            Show detailed preview of specific theme\n", .{});
     std.debug.print("      --show-themes                  Show all built-in themes with preview\n", .{});
     std.debug.print("      --write-theme <PATH>           Export theme to TOML file and exit\n", .{});
     std.debug.print("      --config-options <PATH>        Export install.toml as NWIZ_* variables\n", .{});
     std.debug.print("\n", .{});
+}
+
+pub fn listThemes() void {
+    std.debug.print("Available Built-in Themes:\n", .{});
+    
+    const themes = theme.BuiltinTheme.getAllThemes();
+    
+    for (themes) |builtin_theme| {
+        const theme_name = builtin_theme.getName();
+        std.debug.print("  {s}\n", .{theme_name});
+    }
+    
+    std.debug.print("\nUsage: nwizard --theme <name>\n", .{});
+    std.debug.print("       nwizard --show-theme <name>  (see detailed preview)\n", .{});
+    std.debug.print("       nwizard --show-themes        (see all detailed previews)\n\n", .{});
+}
+
+pub fn showTheme(theme_name: []const u8) void {
+    // Find the theme
+    const builtin_theme = theme.BuiltinTheme.fromString(theme_name) orelse {
+        std.debug.print("Error: Unknown theme '{s}'\n", .{theme_name});
+        std.debug.print("Use --list-themes to see available themes.\n", .{});
+        return;
+    };
+    
+    const theme_instance = theme.Theme.createBuiltinTheme(builtin_theme);
+    
+    std.debug.print("Theme: \x1b[1m{s}\x1b[0m\n\n", .{theme_name});
+    
+    std.debug.print("  Gradient: ", .{});
+    for (theme_instance.gradient, 0..) |color, i| {
+        std.debug.print("\x1b[48;2;{d};{d};{d}m  \x1b[0m", .{ color.r, color.g, color.b });
+        if (i == 4) {
+            std.debug.print("\n            ", .{});
+        }
+    }
+    std.debug.print("\n\n", .{});
+    
+    std.debug.print("  UI Colors:\n", .{});
+    std.debug.print("    Selected:     \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (menu selection)\n", .{
+        theme_instance.selected_menu_item.r,
+        theme_instance.selected_menu_item.g,
+        theme_instance.selected_menu_item.b,
+    });
+    std.debug.print("    Header:       \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (menu headers)\n", .{
+        theme_instance.menu_header.r,
+        theme_instance.menu_header.g,
+        theme_instance.menu_header.b,
+    });
+    std.debug.print("    Border:       \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (window borders)\n", .{
+        theme_instance.border.r,
+        theme_instance.border.g,
+        theme_instance.border.b,
+    });
+    
+    std.debug.print("\n  Usage: nwizard --theme {s}\n\n", .{theme_name});
 }
 
 pub fn showThemes() void {
@@ -132,6 +192,20 @@ pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
             printHelp();
             app_config.should_continue = false;
             return app_config;
+        } else if (std.mem.eql(u8, arg, "--list-themes")) {
+            listThemes();
+            app_config.should_continue = false;
+            return app_config;
+        } else if (std.mem.eql(u8, arg, "--show-theme")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --show-theme requires a theme name\n", .{});
+                app_config.should_continue = false;
+                return app_config;
+            }
+            showTheme(args[i]);
+            app_config.should_continue = false;
+            return app_config;
         } else if (std.mem.eql(u8, arg, "--show-themes")) {
             showThemes();
             app_config.should_continue = false;
@@ -218,5 +292,8 @@ pub fn deinitAppConfig(allocator: std.mem.Allocator, app_config: *const AppConfi
     }
     if (app_config.write_theme_path) |write_theme_path| {
         allocator.free(write_theme_path);
+    }
+    if (app_config.show_theme_name) |show_theme_name| {
+        allocator.free(show_theme_name);
     }
 }

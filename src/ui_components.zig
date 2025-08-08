@@ -31,7 +31,9 @@ pub fn renderExitConfirmation(win: vaxis.Window, app_theme: *const theme.Theme, 
         },
     });
     
-    // Clear the dialog area (no background fill)
+    // Fill the dialog background to prevent bleed-through
+    dialog_win.fill(.{ .char = .{ .grapheme = " " } });
+    
     const text_win = dialog_win.child(.{
         .x_off = 2,
         .y_off = 1,

@@ -67,7 +67,7 @@ pub fn validateMenuStrict(allocator: std.mem.Allocator, menu_toml_path: []const 
     var items_iter = menu_config.items.iterator();
     while (items_iter.next()) |entry| {
         const item = entry.value_ptr;
-        try validateMenuItem(&validation, item);
+        try validateMenuItem(&validation, item, allocator, menu_toml_path);
     }
     
     // Validate raw TOML for unknown fields
@@ -81,7 +81,8 @@ pub fn validateMenuStrict(allocator: std.mem.Allocator, menu_toml_path: []const 
     return true;
 }
 
-fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem) !void {
+fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem, allocator: std.mem.Allocator, menu_toml_path: []const u8) !void {
+    _ = menu_toml_path;
     // Debug: print type and install_key information for specific items
     // (Disabled to reduce output)
     
@@ -106,6 +107,12 @@ fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem) !
             if (item.command != null) {
                 try validation.addError(item.id, "Selector cannot have 'command' field - selectors don't execute commands");
             }
+            if (item.show_output != null) {
+                try validation.addError(item.id, "Selector cannot have 'show_output' field - selectors don't execute commands");
+            }
+            if (item.disclaimer != null) {
+                try validation.addError(item.id, "Selector cannot have 'disclaimer' field - selectors don't execute commands");
+            }
         },
         .multiple_selection => {
             // Validate multiple_selection-specific fields
@@ -126,6 +133,12 @@ fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem) !
             }
             if (item.command != null) {
                 try validation.addError(item.id, "Multiple selection cannot have 'command' field - selections don't execute commands");
+            }
+            if (item.show_output != null) {
+                try validation.addError(item.id, "Multiple selection cannot have 'show_output' field - selections don't execute commands");
+            }
+            if (item.disclaimer != null) {
+                try validation.addError(item.id, "Multiple selection cannot have 'disclaimer' field - selections don't execute commands");
             }
         },
         .action => {
@@ -150,6 +163,21 @@ fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem) !
             if (item.multiple_defaults != null) {
                 try validation.addError(item.id, "Action cannot have 'defaults' field - actions don't have default values");
             }
+            // Note: show_output is allowed for actions and will be validated separately if needed
+            // Validate disclaimer file exists if specified
+            if (item.disclaimer) |disclaimer_path| {
+                // Use the path as-is (relative paths are relative to current working directory)
+                const resolved_path = try allocator.dupe(u8, disclaimer_path);
+                defer allocator.free(resolved_path);
+                
+                // Check if the file exists
+                const file = std.fs.cwd().openFile(resolved_path, .{}) catch |err| {
+                    const msg = try std.fmt.allocPrint(allocator, "Disclaimer file not found: '{}' (resolved to '{s}')", .{ err, resolved_path });
+                    try validation.addError(item.id, msg);
+                    return;
+                };
+                file.close();
+            }
         },
         .submenu => {
             // Validate submenu-specific fields
@@ -165,6 +193,12 @@ fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem) !
             }
             if (item.install_key != null) {
                 try validation.addError(item.id, "Submenu cannot have 'install_key' field - submenus don't save selections");
+            }
+            if (item.show_output != null) {
+                try validation.addError(item.id, "Submenu cannot have 'show_output' field - submenus don't execute commands");
+            }
+            if (item.disclaimer != null) {
+                try validation.addError(item.id, "Submenu cannot have 'disclaimer' field - submenus don't execute commands");
             }
         },
         .menu => {

@@ -11,11 +11,13 @@ const cli = @import("cli.zig");
 
 pub const ConfigurationResult = struct {
     menu_config: menu.MenuConfig,
+    menu_config_path: []const u8,
     install_config: install.InstallConfig,
     install_config_path: []const u8,
     app_theme: theme.Theme,
 
     pub fn deinit(self: *ConfigurationResult, allocator: std.mem.Allocator) void {
+        allocator.free(self.menu_config_path);
         allocator.free(self.install_config_path);
         self.install_config.deinit();
         self.menu_config.deinit(allocator);
@@ -114,6 +116,7 @@ pub fn loadConfigurations(
 
     return ConfigurationResult{
         .menu_config = menu_config,
+        .menu_config_path = try allocator.dupe(u8, config_paths.menu_path),
         .install_config = install_config,
         .install_config_path = install_path_copy,
         .app_theme = app_theme,
