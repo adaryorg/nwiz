@@ -4,8 +4,9 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const theme = @import("theme.zig");
+const tty_compat = @import("tty_compat.zig");
 
-pub fn renderExitConfirmation(win: vaxis.Window, app_theme: *const theme.Theme) void {
+pub fn renderExitConfirmation(win: vaxis.Window, app_theme: *const theme.Theme, terminal_mode: tty_compat.TerminalMode) void {
     const width = win.width;
     const height = win.height;
     
@@ -15,7 +16,7 @@ pub fn renderExitConfirmation(win: vaxis.Window, app_theme: *const theme.Theme) 
     const start_y = if (height > dialog_height) (height - dialog_height) / 2 else 0;
     
     const border_style = vaxis.Style{
-        .fg = app_theme.border.toVaxisColor(),
+        .fg = app_theme.border.toVaxisColorCompat(terminal_mode),
     };
     
     const dialog_win = win.child(.{
@@ -26,6 +27,7 @@ pub fn renderExitConfirmation(win: vaxis.Window, app_theme: *const theme.Theme) 
         .border = .{
             .where = .all,
             .style = border_style,
+            .glyphs = tty_compat.getBorderGlyphs(terminal_mode),
         },
     });
     
@@ -38,12 +40,12 @@ pub fn renderExitConfirmation(win: vaxis.Window, app_theme: *const theme.Theme) 
     });
     
     const title_style = vaxis.Style{
-        .fg = app_theme.menu_header.toVaxisColor(),
+        .fg = app_theme.menu_header.toVaxisColorCompat(terminal_mode),
         .bold = true,
     };
     
     const normal_style = vaxis.Style{
-        .fg = app_theme.unselected_menu_item.toVaxisColor(),
+        .fg = app_theme.unselected_menu_item.toVaxisColorCompat(terminal_mode),
     };
     
     // Title - centered

@@ -15,6 +15,7 @@ const cli = @import("cli.zig");
 const bootstrap = @import("bootstrap.zig");
 const terminal = @import("terminal.zig");
 const ui_components = @import("ui_components.zig");
+const tty_compat = @import("tty_compat.zig");
 
 var global_async_executor: ?*executor.AsyncCommandExecutor = null;
 pub var global_shell_pid: ?std.posix.pid_t = null;
@@ -202,6 +203,12 @@ pub fn main() !void {
     
     try vx.queryTerminal(tty.anyWriter(), 1 * std.time.ns_per_s);
 
+    // Detect terminal mode (TTY vs PTY)
+    const terminal_mode = tty_compat.detectTerminalMode();
+    if (terminal_mode == .tty) {
+        std.debug.print("Running in TTY mode - using ANSI 8-color palette and simple borders\n", .{});
+    }
+
     // Load theme configuration (built-in or from file)
     const theme_spec = app_config.theme_spec orelse "nocturne";
     var app_theme = try theme.loadTheme(allocator, theme_spec);
@@ -297,7 +304,10 @@ pub fn main() !void {
     }
 
     // Initialize menu renderer
-    var menu_renderer = menu.MenuRenderer{ .theme = &app_theme };
+    var menu_renderer = menu.MenuRenderer{ 
+        .theme = &app_theme,
+        .terminal_mode = terminal_mode,
+    };
 
     // Initialize async command executor
     var async_command_executor = executor.AsyncCommandExecutor.init(allocator);
@@ -453,20 +463,27 @@ pub fn main() !void {
                                         // Start async command execution with variable substitution
                                         defer allocator.free(command); // Free the allocated command string
                                         const command_copy = try allocator.dupe(u8, command);
+                                        const menu_item_name_copy = try allocator.dupe(u8, current_item.name);
                                         async_command_executor.startCommand(command) catch |err| {
                                             allocator.free(command_copy);
+                                            allocator.free(menu_item_name_copy);
                                             std.debug.print("Failed to start command: {}\n", .{err});
                                             continue;
                                         };
-                                        async_output_viewer = executor.AsyncOutputViewer.init(allocator, &async_command_executor, command_copy, &app_theme, menu_state.config.ascii_art);
+                                        async_output_viewer = executor.AsyncOutputViewer.init(allocator, &async_command_executor, command_copy, menu_item_name_copy, &app_theme, menu_state.config.ascii_art, terminal_mode, current_item.nwizard_status_prefix);
                                         app_state = .viewing_output;
                                     } else {
                                         const entered = menu_state.enterSubmenu() catch false;
                                         _ = entered;
                                     }
                                 } else if (key.matches(vaxis.Key.escape, .{})) {
-                                    // Only go back if we're in a submenu, do nothing at top level
-                                    _ = menu_state.goBack() catch false;
+                                    // Go back if in submenu, exit if at root
+                                    const went_back = menu_state.goBack() catch false;
+                                    if (!went_back) {
+                                        // We're at root menu, exit the application
+                                        sudo.requestShutdown();
+                                        break;
+                                    }
                                 } else if (key.matches(vaxis.Key.left, .{})) {
                                     // Left arrow also goes back for intuitive navigation
                                     _ = menu_state.goBack() catch false;
@@ -528,6 +545,15 @@ pub fn main() !void {
                                 } else if (key.codepoint == 's') {
                                     // Toggle output visibility
                                     viewer.toggleOutputVisibility();
+                                } else if (key.codepoint == 'g' and !key.mods.shift) {
+                                    // Go to top of output
+                                    viewer.scrollToTop();
+                                } else if (key.codepoint == 'g' and key.mods.shift) {
+                                    // Go to bottom of output and continue following (Shift+G)
+                                    viewer.scrollToBottomAndFollow();
+                                } else if (key.codepoint == 'G') {
+                                    // Legacy handler for actual uppercase G (fallback)
+                                    viewer.scrollToBottomAndFollow();
                                 }
                             }
                         },
@@ -585,7 +611,7 @@ pub fn main() !void {
                 }
                 
                 // Then render the exit confirmation overlay
-                ui_components.renderExitConfirmation(win, &app_theme);
+                ui_components.renderExitConfirmation(win, &app_theme, terminal_mode);
             },
         }
 

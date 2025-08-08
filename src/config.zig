@@ -269,6 +269,10 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
             menu_item.command = item_parser.parseString() catch null;
         }
         
+        if (item_parser.findKey("nwizard_status")) |_| {
+            menu_item.nwizard_status_prefix = item_parser.parseString() catch null;
+        }
+        
         if (menu_item.type == .selector) {
             if (item_parser.findKey("options")) |_| {
                 const parsed_array = item_parser.parseArray() catch null;

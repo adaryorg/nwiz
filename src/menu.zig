@@ -4,6 +4,7 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const theme = @import("theme.zig");
+const tty_compat = @import("tty_compat.zig");
 
 pub const MenuItemType = enum {
     action,
@@ -33,6 +34,9 @@ pub const MenuItem = struct {
     multiple_option_comments: ?[]?[]const u8 = null, // Optional comments for multiple selection options
     multiple_defaults: ?[][]const u8 = null, // Default selected values (multiple)
     install_key: ?[]const u8 = null, // Key in install.toml file for storing selections
+    
+    // Status reporting configuration
+    nwizard_status_prefix: ?[]const u8 = null, // Prefix for status messages from child process
 
     pub fn deinit(self: *MenuItem, allocator: std.mem.Allocator) void {
         // Free all allocated strings
@@ -98,6 +102,9 @@ pub const MenuItem = struct {
         }
         if (self.install_key) |key| {
             allocator.free(key);
+        }
+        if (self.nwizard_status_prefix) |prefix| {
+            allocator.free(prefix);
         }
     }
 };
@@ -570,17 +577,19 @@ pub const MenuState = struct {
 
 pub const MenuRenderer = struct {
     theme: *const theme.Theme,
+    terminal_mode: tty_compat.TerminalMode = .pty,
 
     const Self = @This();
 
     pub fn render(self: *Self, win: vaxis.Window, state: *const MenuState) void {
         win.clear();
 
-        const border_style = vaxis.Style{ .fg = self.theme.border.toVaxisColor() };
+        const border_style = vaxis.Style{ .fg = self.theme.border.toVaxisColorCompat(self.terminal_mode) };
         const menu_win = win.child(.{
             .border = .{
                 .where = .all,
                 .style = border_style,
+                .glyphs = tty_compat.getBorderGlyphs(self.terminal_mode),
             },
         });
 
@@ -620,7 +629,7 @@ pub const MenuRenderer = struct {
             // Draw ASCII art with theme gradient colors (max 10 lines)
             const max_lines = @min(ascii_lines.len, 10);
             for (ascii_lines[0..max_lines], 0..) |line, i| {
-                const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColor();
+                const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColorCompat(self.terminal_mode);
                 const ascii_win = inner_win.child(.{
                     .x_off = @intCast(center_x),
                     .y_off = @intCast(row),
@@ -637,7 +646,7 @@ pub const MenuRenderer = struct {
         row += 1; // Add spacing after ASCII art
 
         const title_style = vaxis.Style{ 
-            .fg = self.theme.menu_header.toVaxisColor(),
+            .fg = self.theme.menu_header.toVaxisColorCompat(self.terminal_mode),
             .bold = true 
         };
         const current_menu = state.getCurrentMenu();
@@ -660,12 +669,12 @@ pub const MenuRenderer = struct {
             
             const prefix = if (is_selected) "> " else "  ";
             const name_style = if (is_selected) 
-                vaxis.Style{ .fg = self.theme.selected_menu_item.toVaxisColor(), .bold = true }
+                vaxis.Style{ .fg = self.theme.selected_menu_item.toVaxisColorCompat(self.terminal_mode), .bold = true }
             else
-                vaxis.Style{ .fg = self.theme.unselected_menu_item.toVaxisColor() };
+                vaxis.Style{ .fg = self.theme.unselected_menu_item.toVaxisColorCompat(self.terminal_mode) };
             
-            const desc_style = vaxis.Style{ .fg = self.theme.menu_description.toVaxisColor() };
-            const value_style = vaxis.Style{ .fg = self.theme.menu_header.toVaxisColor() }; // Use header color for current values
+            const desc_style = vaxis.Style{ .fg = self.theme.menu_description.toVaxisColorCompat(self.terminal_mode) };
+            const value_style = vaxis.Style{ .fg = self.theme.menu_header.toVaxisColorCompat(self.terminal_mode) }; // Use header color for current values
             
             // Print prefix
             const prefix_segment = vaxis.Segment{
@@ -732,8 +741,8 @@ pub const MenuRenderer = struct {
             
             // If this is a selected selector in selector mode, show options
             if (is_selected and state.in_selector_mode and item.type == .selector and item.options != null) {
-                const selector_style = vaxis.Style{ .fg = self.theme.selector_option.toVaxisColor() };
-                const selected_option_style = vaxis.Style{ .fg = self.theme.selector_selected_option.toVaxisColor(), .bold = true };
+                const selector_style = vaxis.Style{ .fg = self.theme.selector_option.toVaxisColorCompat(self.terminal_mode) };
+                const selected_option_style = vaxis.Style{ .fg = self.theme.selector_selected_option.toVaxisColorCompat(self.terminal_mode), .bold = true };
                 
                 if (item.options) |options| {
                     for (options, 0..) |option, opt_i| {
@@ -766,7 +775,7 @@ pub const MenuRenderer = struct {
                         if (item.option_comments) |comments| {
                             if (opt_i < comments.len and comments[opt_i] != null) {
                                 const comment = comments[opt_i].?;
-                                const comment_style = vaxis.Style{ .fg = self.theme.menu_item_comment.toVaxisColor() };
+                                const comment_style = vaxis.Style{ .fg = self.theme.menu_item_comment.toVaxisColorCompat(self.terminal_mode) };
                                 
                                 // Add spacing and opening parenthesis
                                 const paren_open_win = inner_win.child(.{
@@ -810,8 +819,8 @@ pub const MenuRenderer = struct {
             
             // If this is a selected multiple selection in multiple selection mode, show checkboxes
             if (is_selected and state.in_multiple_selection_mode and item.type == .multiple_selection and item.multiple_options != null) {
-                const checkbox_style = vaxis.Style{ .fg = self.theme.selector_option.toVaxisColor() };
-                const selected_checkbox_style = vaxis.Style{ .fg = self.theme.selector_selected_option.toVaxisColor(), .bold = true };
+                const checkbox_style = vaxis.Style{ .fg = self.theme.selector_option.toVaxisColorCompat(self.terminal_mode) };
+                const selected_checkbox_style = vaxis.Style{ .fg = self.theme.selector_selected_option.toVaxisColorCompat(self.terminal_mode), .bold = true };
                 
                 if (item.multiple_options) |options| {
                     for (options, 0..) |option, opt_i| {
@@ -860,7 +869,7 @@ pub const MenuRenderer = struct {
                         if (item.multiple_option_comments) |comments| {
                             if (opt_i < comments.len and comments[opt_i] != null) {
                                 const comment = comments[opt_i].?;
-                                const comment_style = vaxis.Style{ .fg = self.theme.menu_item_comment.toVaxisColor() };
+                                const comment_style = vaxis.Style{ .fg = self.theme.menu_item_comment.toVaxisColorCompat(self.terminal_mode) };
                                 
                                 // Add spacing and opening parenthesis
                                 const paren_open_win = inner_win.child(.{
@@ -904,7 +913,7 @@ pub const MenuRenderer = struct {
         }
 
         const help_row = menu_win.height -| 1;
-        const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColor() };
+        const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColorCompat(self.terminal_mode) };
         const help_text = if (state.in_selector_mode)
             "↑/↓: Select Option | Enter: Confirm | Esc: Cancel"
         else if (state.in_multiple_selection_mode)
@@ -912,7 +921,7 @@ pub const MenuRenderer = struct {
         else if (state.menu_stack.items.len > 0)
             "↑/↓: Navigate | Enter: Select | Esc: Back | q: Quit"
         else
-            "↑/↓: Navigate | Enter: Select | q: Quit";
+            "↑/↓: Navigate | Enter: Select | Esc/q: Quit";
         
         const help_segment = vaxis.Segment{
             .text = help_text,

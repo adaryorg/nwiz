@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const vaxis = @import("vaxis");
+const tty_compat = @import("tty_compat.zig");
 
 pub const BuiltinTheme = enum {
     nocturne,
@@ -70,6 +71,13 @@ pub const ThemeColor = struct {
 
     pub fn toVaxisColor(self: ThemeColor) vaxis.Color {
         return .{ .rgb = .{ self.r, self.g, self.b } };
+    }
+    
+    pub fn toVaxisColorCompat(self: ThemeColor, mode: tty_compat.TerminalMode) vaxis.Color {
+        return switch (mode) {
+            .pty => self.toVaxisColor(),
+            .tty => tty_compat.rgbToAnsi8(self.r, self.g, self.b),
+        };
     }
 
     pub fn fromHex(hex: []const u8) !ThemeColor {

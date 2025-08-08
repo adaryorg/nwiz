@@ -4,6 +4,7 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const theme = @import("theme.zig");
+const tty_compat = @import("tty_compat.zig");
 
 const main = @import("main.zig");
 
@@ -239,38 +240,194 @@ pub const AsyncOutputViewer = struct {
     allocator: std.mem.Allocator,
     command_was_running: bool = false,
     command: []const u8,
+    menu_item_name: []const u8,
     theme: *const theme.Theme,
+    terminal_mode: tty_compat.TerminalMode = .pty,
     show_output: bool = false,
     spinner_frame: usize = 0,
     last_update_time: i64 = 0,
     ascii_art: [][]const u8,
-
+    
+    // Status tracking
+    status_prefix: ?[]const u8 = null,
+    current_status: ?StatusMessage = null,
+    status_history_buffer: std.ArrayList(u8), // Simple text buffer for history
+    timezone_offset_seconds: ?i32 = null, // Cached timezone offset
+    
     const Self = @This();
+    
+    const StatusMessage = struct {
+        message: []const u8,
+        timestamp: i64,
+    };
 
-    pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, app_theme: *const theme.Theme, ascii_art: [][]const u8) Self {
+    pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, menu_item_name: []const u8, app_theme: *const theme.Theme, ascii_art: [][]const u8, terminal_mode: tty_compat.TerminalMode, status_prefix: ?[]const u8) Self {
         return Self{
             .async_executor = async_executor,
             .allocator = allocator,
             .auto_scroll = async_executor.isRunning(),
             .command_was_running = async_executor.isRunning(),
             .command = command,
+            .menu_item_name = menu_item_name,
             .theme = app_theme,
+            .terminal_mode = terminal_mode,
             .ascii_art = ascii_art,
+            .status_prefix = status_prefix,
+            .status_history_buffer = std.ArrayList(u8).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.allocator.free(self.command);
+        self.allocator.free(self.menu_item_name);
+        
+        // Clean up status history buffer
+        self.status_history_buffer.deinit();
+        
+        // Clean up current status
+        if (self.current_status) |status| {
+            self.allocator.free(status.message);
+        }
+    }
+    
+    fn parseStatusLine(self: *Self, line: []const u8) void {
+        if (self.status_prefix) |prefix| {
+            if (std.mem.startsWith(u8, line, prefix)) {
+                // Extract status message after prefix
+                const status_msg = std.mem.trim(u8, line[prefix.len..], " \t\r\n");
+                if (status_msg.len > 0) {
+                    // CRITICAL FIX: Create a stable copy of the message immediately
+                    // since status_msg is a slice into the output buffer that can change
+                    const stable_message = self.allocator.dupe(u8, status_msg) catch return;
+                    defer self.allocator.free(stable_message); // Clean up after use
+                    
+                    self.updateStatus(stable_message) catch {
+                        // If we can't allocate memory for status, just ignore it
+                    };
+                }
+            }
+        }
+    }
+    
+    fn updateStatus(self: *Self, message: []const u8) !void {
+        const timestamp = std.time.timestamp();
+        
+        // STEP 1: If we have a current status, add it to history buffer
+        if (self.current_status) |current| {
+            // Format timestamp properly (no plus signs)
+            var time_buf: [16]u8 = undefined;
+            const time_str = self.formatTimestamp(current.timestamp, &time_buf);
+            
+            // Add to history buffer: "[HH:MM:SS] message\n"
+            self.status_history_buffer.writer().print("[{s}] {s}\n", .{ time_str, current.message }) catch {};
+            
+            // Free the old current status
+            self.allocator.free(current.message);
+            self.current_status = null;
+        }
+        
+        // STEP 2: Create new current status
+        const new_message = try self.allocator.dupe(u8, message);
+        self.current_status = StatusMessage{
+            .message = new_message,
+            .timestamp = timestamp,
+        };
+    }
+    
+    fn parseNewOutput(self: *Self, new_output: []const u8) void {
+        // Look for complete lines ending in newline
+        var line_iter = std.mem.splitScalar(u8, new_output, '\n');
+        while (line_iter.next()) |line| {
+            // Skip empty lines
+            if (line.len == 0) continue;
+            
+            // Parse line for status message
+            self.parseStatusLine(line);
+        }
+    }
+    
+    // All complex rendering functions removed - using Vaxis built-in text handling
+    
+    fn getTimezoneOffset(self: *Self) i32 {
+        if (self.timezone_offset_seconds) |offset| {
+            return offset;
+        }
+        
+        // Get timezone offset once and cache it
+        const result = std.process.Child.run(.{
+            .allocator = std.heap.page_allocator,
+            .argv = &[_][]const u8{ "date", "+%z" },
+        }) catch {
+            self.timezone_offset_seconds = 0;
+            return 0;
+        };
+        defer std.heap.page_allocator.free(result.stdout);
+        defer std.heap.page_allocator.free(result.stderr);
+        
+        // Parse timezone offset (format: +0300 or -0500)
+        var offset: i32 = 0;
+        if (result.stdout.len >= 5) {
+            const sign = if (result.stdout[0] == '+') @as(i32, 1) else @as(i32, -1);
+            const hours_offset = std.fmt.parseInt(i32, result.stdout[1..3], 10) catch 0;
+            const mins_offset = std.fmt.parseInt(i32, result.stdout[3..5], 10) catch 0;
+            offset = sign * (hours_offset * 3600 + mins_offset * 60);
+        }
+        
+        self.timezone_offset_seconds = offset;
+        return offset;
+    }
+
+    fn formatTimestamp(self: *Self, timestamp: i64, buffer: []u8) []const u8 {
+        // Get cached timezone offset
+        const timezone_offset = self.getTimezoneOffset();
+        
+        // Apply timezone offset to get local time
+        const local_timestamp = timestamp + timezone_offset;
+        
+        // Extract time components
+        const seconds_in_minute = 60;
+        const seconds_in_hour = 3600;
+        const seconds_in_day = 86400;
+        
+        const seconds_today = @mod(@as(u64, @intCast(local_timestamp)), seconds_in_day);
+        const hours = @as(u8, @intCast(@divTrunc(seconds_today, seconds_in_hour)));
+        const minutes = @as(u8, @intCast(@divTrunc(@mod(seconds_today, seconds_in_hour), seconds_in_minute)));
+        const secs = @as(u8, @intCast(@mod(seconds_today, seconds_in_minute)));
+        
+        return std.fmt.bufPrint(buffer, "{d:0>2}:{d:0>2}:{d:0>2}", .{ hours, minutes, secs }) catch "00:00:00";
     }
 
     pub fn updateContent(self: *Self) void {
+        // Process output and parse status lines
+        const output_before = self.async_executor.output_buffer.items.len;
         _ = self.async_executor.readAvailableOutput() catch {};
+        
+        // Parse any new output for status messages (only new content)
+        if (self.status_prefix != null and output_before < self.async_executor.output_buffer.items.len) {
+            const output = self.async_executor.getOutput();
+            const new_output = output[output_before..];
+            self.parseNewOutput(new_output);
+        }
         
         const is_running = self.async_executor.isRunning();
         
+        // When command finishes, move current status to history
         if (self.command_was_running and !is_running) {
             self.auto_scroll = false;
             self.scroll_offset = 0;
+            
+            // Move current status to history buffer when command completes
+            if (self.current_status) |current| {
+                var time_buf: [16]u8 = undefined;
+                const time_str = self.formatTimestamp(current.timestamp, &time_buf);
+                
+                // Add to history buffer
+                self.status_history_buffer.writer().print("[{s}] {s}\n", .{ time_str, current.message }) catch {};
+                
+                // Free and clear current status
+                self.allocator.free(current.message);
+                self.current_status = null;
+            }
         }
         self.command_was_running = is_running;
         
@@ -291,16 +448,44 @@ pub const AsyncOutputViewer = struct {
         self.scroll_offset = if (self.total_lines > 0) self.total_lines - 1 else 0;
     }
 
+    pub fn scrollToTop(self: *Self) void {
+        self.scroll_offset = 0;
+        self.auto_scroll = false; // Disable auto-scroll when manually going to top
+    }
+
+    pub fn scrollToBottomAndFollow(self: *Self) void {
+        // Force update to ensure we have the latest total_lines count
+        self.updateContent();
+        
+        // Calculate the correct scroll offset for bottom
+        if (self.show_output) {
+            // When showing output, use the full output length
+            const output = self.async_executor.getOutput();
+            var line_count: usize = 0;
+            var line_iter = std.mem.splitScalar(u8, output, '\n');
+            while (line_iter.next()) |_| {
+                line_count += 1;
+            }
+            self.scroll_offset = if (line_count > 0) line_count - 1 else 0;
+        } else {
+            // When in status view, just go to bottom of current content
+            self.scroll_offset = if (self.total_lines > 0) self.total_lines - 1 else 0;
+        }
+        
+        self.auto_scroll = true; // Enable auto-scroll to continue following new output
+    }
+
     pub fn render(self: *Self, win: vaxis.Window) void {
         self.updateContent();
         
         win.clear();
 
-        const border_style = vaxis.Style{ .fg = self.theme.border.toVaxisColor() };
+        const border_style = vaxis.Style{ .fg = self.theme.border.toVaxisColorCompat(self.terminal_mode) };
         const output_win = win.child(.{
             .border = .{
                 .where = .all,
                 .style = border_style,
+                .glyphs = tty_compat.getBorderGlyphs(self.terminal_mode),
             },
         });
 
@@ -335,7 +520,7 @@ pub const AsyncOutputViewer = struct {
 
             const max_lines = @min(ascii_lines.len, 10);
             for (ascii_lines[0..max_lines], 0..) |line, i| {
-                const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColor();
+                const color = self.theme.ascii_art[i % self.theme.ascii_art.len].toVaxisColorCompat(self.terminal_mode);
                 const ascii_win = inner_win.child(.{
                     .x_off = @intCast(center_x),
                     .y_off = @intCast(row),
@@ -352,7 +537,7 @@ pub const AsyncOutputViewer = struct {
         }
 
         const title_style = vaxis.Style{ 
-            .fg = self.theme.menu_header.toVaxisColor(),
+            .fg = self.theme.menu_header.toVaxisColorCompat(self.terminal_mode),
             .bold = true 
         };
         
@@ -363,24 +548,14 @@ pub const AsyncOutputViewer = struct {
         else 
             "";
             
-        const prefix_segment = vaxis.Segment{
-            .text = "$ ",
+        const menu_item_segment = vaxis.Segment{
+            .text = self.menu_item_name,
             .style = title_style,
         };
-        _ = inner_win.printSegment(prefix_segment, .{ .row_offset = @intCast(row) });
-        
-        const command_win = inner_win.child(.{
-            .x_off = 2,
-            .y_off = @intCast(row),
-        });
-        const command_segment = vaxis.Segment{
-            .text = self.command,
-            .style = title_style,
-        };
-        _ = command_win.printSegment(command_segment, .{ .row_offset = 0 });
+        _ = inner_win.printSegment(menu_item_segment, .{ .row_offset = @intCast(row) });
         
         const status_win = inner_win.child(.{
-            .x_off = @intCast(2 + self.command.len),
+            .x_off = @intCast(self.menu_item_name.len),
             .y_off = @intCast(row),
         });
         const status_segment = vaxis.Segment{
@@ -399,65 +574,98 @@ pub const AsyncOutputViewer = struct {
                 }
             }
             
-            const status_msg = if (self.async_executor.isRunning()) 
+            // 1. Status History (simple text buffer) - allow natural flow
+            if (self.status_history_buffer.items.len > 0) {
+                const history_style = vaxis.Style{ .fg = self.theme.menu_description.toVaxisColorCompat(self.terminal_mode) };
+                
+                // Split history buffer into lines and show recent ones
+                var lines = std.ArrayList([]const u8).init(std.heap.page_allocator);
+                defer lines.deinit();
+                
+                var line_iter = std.mem.splitScalar(u8, self.status_history_buffer.items, '\n');
+                while (line_iter.next()) |line| {
+                    if (line.len == 0) continue;
+                    lines.append(line) catch break;
+                }
+                
+                // Show as many history lines as possible while keeping spinner visible
+                // Leave at least 2 lines for current status + footer
+                const available_space = if (inner_win.height > row + 2) 
+                    inner_win.height - row - 2
+                else 
+                    1;
+                const max_history_lines = @min(lines.items.len, available_space);
+                const start_idx = if (lines.items.len > max_history_lines) 
+                    lines.items.len - max_history_lines 
+                else 
+                    0;
+                for (lines.items[start_idx..start_idx + max_history_lines]) |line| {
+                    // Truncate long lines to prevent display corruption
+                    const display_line = if (line.len > inner_win.width - 4) line[0..inner_win.width - 4] else line;
+                    
+                    const line_win = inner_win.child(.{
+                        .x_off = 2,
+                        .y_off = @intCast(row),
+                    });
+                    _ = line_win.printSegment(.{ .text = display_line, .style = history_style }, .{ .row_offset = 0 });
+                    row += 1;
+                }
+            }
+            
+            // 2. Current Status (spinner + message) - flows naturally down the screen
+            const current_msg_full = if (self.current_status) |current| 
+                current.message
+            else if (self.async_executor.isRunning())
                 "Processing command..."
             else if (self.async_executor.getExitCode()) |code|
                 if (code == 0) "Command completed successfully" else "Command failed"
-            else 
+            else
                 "Command completed";
             
-            const msg_style = vaxis.Style{ .fg = self.theme.menu_header.toVaxisColor() };
-            const msg_center_x = if (inner_win.width >= status_msg.len) 
-                (inner_win.width - status_msg.len) / 2
+            // Truncate message if too long to prevent overflow
+            const max_msg_len = if (inner_win.width > 20) inner_win.width - 10 else 10;
+            const current_msg = if (current_msg_full.len > max_msg_len) 
+                current_msg_full[0..max_msg_len] 
             else 
-                0;
+                current_msg_full;
             
+            const msg_style = vaxis.Style{ .fg = self.theme.menu_header.toVaxisColorCompat(self.terminal_mode) };
+            
+            // Allow spinner line to flow to anywhere in the window - NO CONSTRAINTS
+            const current_status_row = row;
+            
+            // Calculate positioning to fit spinner + space + message centered
+            const spinner_width: usize = if (self.async_executor.isRunning()) 2 else 0;
+            const total_width = spinner_width + current_msg.len;
+            const start_x = if (inner_win.width >= total_width) 
+                (inner_win.width - total_width) / 2 
+            else 
+                2;
+            
+            var current_x = start_x;
+            
+            // Spinner (if running)
             if (self.async_executor.isRunning()) {
                 const spinner_chars = [_][]const u8{ "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" };
                 const spinner_win = inner_win.child(.{
-                    .x_off = @intCast(msg_center_x -| 2),
-                    .y_off = @intCast(row + 2),
+                    .x_off = @intCast(current_x),
+                    .y_off = @intCast(current_status_row),
                 });
-                
-                const spinner_segment = vaxis.Segment{
-                    .text = spinner_chars[self.spinner_frame],
-                    .style = msg_style,
-                };
-                _ = spinner_win.printSegment(spinner_segment, .{ .row_offset = 0 });
+                _ = spinner_win.printSegment(.{ .text = spinner_chars[self.spinner_frame], .style = msg_style }, .{ .row_offset = 0 });
+                current_x += 2; // spinner + space
             }
             
+            // Current message (right after spinner)
             const msg_win = inner_win.child(.{
-                .x_off = @intCast(msg_center_x),
-                .y_off = @intCast(row + 2),
+                .x_off = @intCast(current_x),
+                .y_off = @intCast(current_status_row),
             });
-            const msg_segment = vaxis.Segment{
-                .text = status_msg,
-                .style = msg_style,
-            };
-            _ = msg_win.printSegment(msg_segment, .{ .row_offset = 0 });
-            
-            const instruction_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColor() };
-            const instruction_text = "Press 's' to show output";
-            const instruction_width = instruction_text.len;
-            const instruction_x = if (inner_win.width >= instruction_width) 
-                (inner_win.width - instruction_width) / 2
-            else 
-                0;
-            
-            const instruction_win = inner_win.child(.{
-                .x_off = @intCast(instruction_x),
-                .y_off = @intCast(row + 4),
-            });
-            const instruction_segment = vaxis.Segment{
-                .text = instruction_text,
-                .style = instruction_style,
-            };
-            _ = instruction_win.printSegment(instruction_segment, .{ .row_offset = 0 });
+            _ = msg_win.printSegment(.{ .text = current_msg, .style = msg_style }, .{ .row_offset = 0 });
         } else {
             const output_text = self.async_executor.getOutput();
             const output_to_display = if (output_text.len > 0) output_text else "Waiting for output...";
             
-            const output_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
+            const output_style = vaxis.Style{ .fg = self.theme.white.toVaxisColorCompat(self.terminal_mode) };
         
         var wrapped_lines = std.ArrayList([]const u8).init(std.heap.page_allocator);
         defer wrapped_lines.deinit();
@@ -562,14 +770,16 @@ pub const AsyncOutputViewer = struct {
         }
 
         const help_row = output_win.height -| 1;
-        const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColor() };
+        const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColorCompat(self.terminal_mode) };
         
         const help_text = if (!self.show_output and self.async_executor.isRunning())
             "s: Show output | c: Kill command | Esc: Back to menu | Ctrl+C: Exit app"
         else if (self.show_output and self.async_executor.isRunning())
-            "↑/↓: Scroll | PgUp/PgDn: Page | s: Hide output | c: Kill | Esc: Back | Ctrl+C: Exit"
+            "↑/↓: Scroll | g: Jump to top | G: Jump to bottom | s: Hide | c: Kill | Esc: Back"
+        else if (!self.show_output)
+            "s: Show output | ↑/↓: Scroll | g: Jump to top | G: Jump to bottom | Esc: Back"
         else
-            "↑/↓: Scroll | PgUp/PgDn: Page | Esc: Back to menu | Ctrl+C: Exit app";
+            "↑/↓: Scroll | g: Jump to top | G: Jump to bottom | s: Hide | Esc: Back";
             
         const help_segment = vaxis.Segment{
             .text = help_text,
@@ -591,8 +801,8 @@ pub const AsyncOutputViewer = struct {
         else 
             0;
         
-        const scrollbar_style = vaxis.Style{ .fg = self.theme.dark_grey.toVaxisColor() };
-        const thumb_style = vaxis.Style{ .fg = self.theme.white.toVaxisColor() };
+        const scrollbar_style = vaxis.Style{ .fg = self.theme.dark_grey.toVaxisColorCompat(self.terminal_mode) };
+        const thumb_style = vaxis.Style{ .fg = self.theme.white.toVaxisColorCompat(self.terminal_mode) };
         
         var i: usize = 0;
         while (i < scrollbar_height) : (i += 1) {
