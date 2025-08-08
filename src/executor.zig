@@ -2,11 +2,22 @@
 // SPDX-License-Identifier: MIT
 
 const std = @import("std");
+const builtin = @import("builtin");
 const vaxis = @import("vaxis");
 const theme = @import("theme.zig");
 const tty_compat = @import("tty_compat.zig");
 
 const main = @import("main.zig");
+
+/// Get the platform-appropriate O_NONBLOCK flag value
+/// macOS uses 0o4 (4), Linux uses 0o4000 (2048)
+fn getONonblockFlag() u32 {
+    return switch (builtin.os.tag) {
+        .macos => 0o4,
+        .linux => 0o4000,
+        else => 0o4000, // Default to Linux value for other Unix-like systems
+    };
+}
 
 pub const ExecutionResult = struct {
     success: bool,
@@ -69,11 +80,11 @@ pub const AsyncCommandExecutor = struct {
         main.global_shell_pid = child.id;
         if (child.stdout) |stdout| {
             const flags = try std.posix.fcntl(stdout.handle, std.posix.F.GETFL, 0);
-            _ = try std.posix.fcntl(stdout.handle, std.posix.F.SETFL, flags | 0o4000); // O_NONBLOCK
+            _ = try std.posix.fcntl(stdout.handle, std.posix.F.SETFL, flags | getONonblockFlag());
         }
         if (child.stderr) |stderr| {
             const flags = try std.posix.fcntl(stderr.handle, std.posix.F.GETFL, 0);
-            _ = try std.posix.fcntl(stderr.handle, std.posix.F.SETFL, flags | 0o4000); // O_NONBLOCK
+            _ = try std.posix.fcntl(stderr.handle, std.posix.F.SETFL, flags | getONonblockFlag());
         }
         
         self.mutex.lock();

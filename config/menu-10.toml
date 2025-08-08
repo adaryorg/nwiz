@@ -33,7 +33,7 @@ description = "Install Nocturne components"
 type = "selector"
 name = "Default Editor"
 description = "Choose your preferred editor"
-variable_name = "EDITOR"
+install_key = "EDITOR"
 options = ["vim", "nano", "emacs"]
 default = "vim"
 
@@ -55,7 +55,7 @@ name = "Select Browser to Install"
 description = "Choose which browser to install"
 options = ["firefox", "chromium:Open source chromium", "brave", "opera", "zen", "vivaldi", "chrome:Google chrome"]
 default = "firefox"
-variable = "BROWSER"
+install_key = "BROWSER"
 
 [menu.install.packages]
 type = "multiple_selection"
@@ -99,7 +99,7 @@ name = "Select Theme"
 description = "Choose your desktop theme"
 options = ["dark", "light", "nocturne", "purple", "blue"]
 default = "nocturne"
-variable = "THEME"
+install_key = "THEME"
 
 [menu.configuration.apply_theme]
 type = "action"

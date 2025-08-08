@@ -131,6 +131,17 @@ pub fn main() !void {
         std.debug.print("Running in no-sudo mode - commands requiring privileges may fail.\n", .{});
     }
 
+    // Validate menu configuration before proceeding
+    const menu_config_path = app_config.config_file orelse "~/.config/nwizard/menu.toml";
+    const is_menu_valid = linter.validateMenuStrict(allocator, menu_config_path) catch |err| {
+        std.debug.print("Failed to validate menu configuration: {}\n", .{err});
+        return;
+    };
+    if (!is_menu_valid) {
+        // Validation errors already printed by validateMenuStrict
+        return;
+    }
+
     // Load configurations
     var configs = try app_init.loadConfigurations(allocator, app_config);
     defer configs.deinit(allocator);

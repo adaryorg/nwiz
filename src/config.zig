@@ -17,6 +17,10 @@ pub const TomlParser = struct {
             .allocator = allocator,
         };
     }
+    
+    pub fn reset(self: *Self) void {
+        self.pos = 0;
+    }
 
     fn skipWhitespace(self: *Self) void {
         while (self.pos < self.content.len) {
@@ -213,6 +217,9 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
         
         var item_parser = TomlParser.init(allocator, section);
         
+        // Debug: Print section content for problematic items
+        // (Disabled to reduce output)
+        
         const dot_count = std.mem.count(u8, menu_path, ".");
         const item_type: menu.MenuItemType = if (dot_count == 0) .menu else blk: {
             const has_children = hasChildrenInContent(file_content, menu_path);
@@ -236,6 +243,7 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
             .install_key = null,
         };
 
+        item_parser.reset();
         if (item_parser.findKey("type")) |_| {
             const type_str = item_parser.parseString() catch "action";
             if (std.mem.eql(u8, type_str, "menu")) {
@@ -252,27 +260,38 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
             allocator.free(type_str);
         }
         
+        item_parser.reset();
         if (item_parser.findKey("name")) |_| {
             const name = item_parser.parseString() catch menu_path;
             allocator.free(menu_item.name);
             menu_item.name = name;
         }
         
+        item_parser.reset();
         if (item_parser.findKey("description")) |_| {
             const desc = item_parser.parseString() catch "";
             allocator.free(menu_item.description);
             menu_item.description = desc;
         }
         
+        item_parser.reset();
         if (item_parser.findKey("command")) |_| {
             menu_item.command = item_parser.parseString() catch null;
         }
         
+        item_parser.reset();
         if (item_parser.findKey("nwizard_status")) |_| {
             menu_item.nwizard_status_prefix = item_parser.parseString() catch null;
         }
         
+        // Parse install_key for all types (validation will check if it's appropriate)
+        item_parser.reset();
+        if (item_parser.findKey("install_key")) |_| {
+            menu_item.install_key = item_parser.parseString() catch null;
+        }
+        
         if (menu_item.type == .selector) {
+            item_parser.reset();
             if (item_parser.findKey("options")) |_| {
                 const parsed_array = item_parser.parseArray() catch null;
                 if (parsed_array) |array| {
@@ -281,18 +300,16 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
                 }
             }
             
+            item_parser.reset();
             if (item_parser.findKey("default")) |_| {
                 const default_val = item_parser.parseString() catch null;
                 menu_item.default_value = default_val;
                 menu_item.current_value = if (default_val) |val| try allocator.dupe(u8, val) else null;
             }
-            
-            if (item_parser.findKey("install_key")) |_| {
-                menu_item.install_key = item_parser.parseString() catch null;
-            }
         }
         
         if (menu_item.type == .multiple_selection) {
+            item_parser.reset();
             if (item_parser.findKey("options")) |_| {
                 const parsed_array = item_parser.parseArray() catch null;
                 if (parsed_array) |array| {
@@ -301,6 +318,7 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
                 }
             }
             
+            item_parser.reset();
             if (item_parser.findKey("defaults")) |_| {
                 const parsed_array = item_parser.parseArray() catch null;
                 if (parsed_array) |array| {
@@ -312,10 +330,6 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
                         allocator.free(array.comments);
                     }
                 }
-            }
-            
-            if (item_parser.findKey("install_key")) |_| {
-                menu_item.install_key = item_parser.parseString() catch null;
             }
         }
 

@@ -5,263 +5,212 @@ const std = @import("std");
 const config = @import("config.zig");
 const menu = @import("menu.zig");
 
-pub fn lintMenuFile(allocator: std.mem.Allocator, menu_toml_path: []const u8) !void {
-    std.debug.print("Linting menu file: {s}\n", .{menu_toml_path});
+const ValidationError = struct {
+    item_id: []const u8,
+    message: []const u8,
+};
+
+const ValidationResult = struct {
+    errors: std.ArrayList(ValidationError),
+    allocator: std.mem.Allocator,
     
+    pub fn init(allocator: std.mem.Allocator) ValidationResult {
+        return ValidationResult{
+            .errors = std.ArrayList(ValidationError).init(allocator),
+            .allocator = allocator,
+        };
+    }
+    
+    pub fn deinit(self: *ValidationResult) void {
+        for (self.errors.items) |error_item| {
+            self.allocator.free(error_item.item_id);
+            self.allocator.free(error_item.message);
+        }
+        self.errors.deinit();
+    }
+    
+    pub fn addError(self: *ValidationResult, item_id: []const u8, message: []const u8) !void {
+        try self.errors.append(ValidationError{
+            .item_id = try self.allocator.dupe(u8, item_id),
+            .message = try self.allocator.dupe(u8, message),
+        });
+    }
+    
+    pub fn hasErrors(self: *const ValidationResult) bool {
+        return self.errors.items.len > 0;
+    }
+    
+    pub fn printErrors(self: *const ValidationResult, menu_path: []const u8) void {
+        if (self.hasErrors()) {
+            std.debug.print("Menu validation failed: {s}\n\n", .{menu_path});
+            for (self.errors.items) |error_item| {
+                std.debug.print("ERROR [{s}]: {s}\n", .{ error_item.item_id, error_item.message });
+            }
+            std.debug.print("\nValidation failed with {} error(s). Please fix the menu configuration.\n", .{self.errors.items.len});
+        }
+    }
+};
+
+pub fn validateMenuStrict(allocator: std.mem.Allocator, menu_toml_path: []const u8) !bool {
     // Load and parse the menu configuration
     var menu_config = config.loadMenuConfig(allocator, menu_toml_path) catch |err| {
         std.debug.print("CRITICAL: Failed to load menu configuration: {}\n", .{err});
         std.debug.print("The menu.toml file cannot be parsed. Please check the file syntax and try again.\n", .{});
-        return;
+        return false;
     };
     defer menu_config.deinit(allocator);
     
-    var found_errors = false;
+    var validation = ValidationResult.init(allocator);
+    defer validation.deinit();
     
-    // Check for required global menu configuration
-    std.debug.print("\nChecking global menu configuration...\n", .{});
-    
-    if (menu_config.title.len == 0) {
-        std.debug.print("ERROR: Menu has no title configured\n", .{});
-        found_errors = true;
-    } else {
-        std.debug.print("OK: Menu title is configured: {s}\n", .{menu_config.title});
+    // Validate each menu item
+    var items_iter = menu_config.items.iterator();
+    while (items_iter.next()) |entry| {
+        const item = entry.value_ptr;
+        try validateMenuItem(&validation, item);
     }
     
-    if (menu_config.description.len == 0) {
-        std.debug.print("ERROR: Menu has no description configured\n", .{});
-        found_errors = true;
-    } else {
-        std.debug.print("OK: Menu description is configured: {s}\n", .{menu_config.description});
+    // Validate raw TOML for unknown fields
+    try validateRawTOMLFields(&validation, allocator, menu_toml_path);
+    
+    if (validation.hasErrors()) {
+        validation.printErrors(menu_toml_path);
+        return false;
     }
     
-    // Check for orphaned menu items
-    std.debug.print("\nChecking for orphaned menu items...\n", .{});
+    return true;
+}
+
+fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem) !void {
+    // Debug: print type and install_key information for specific items
+    // (Disabled to reduce output)
     
-    var referenced_ids = std.HashMap([]const u8, bool, std.hash_map.StringContext, std.hash_map.default_max_load_percentage).init(allocator);
-    defer {
-        var iter = referenced_ids.iterator();
-        while (iter.next()) |entry| {
-            allocator.free(entry.key_ptr.*);
-        }
-        referenced_ids.deinit();
-    }
-    
-    // Collect all referenced IDs from item_ids arrays
-    var menu_iterator = menu_config.items.iterator();
-    while (menu_iterator.next()) |entry| {
-        const menu_item = entry.value_ptr;
-        if (menu_item.item_ids) |ids| {
-            for (ids) |id| {
-                const id_copy = try allocator.dupe(u8, id);
-                try referenced_ids.put(id_copy, true);
+    switch (item.type) {
+        .selector => {
+            // Validate selector-specific fields
+            if (item.options == null or item.options.?.len == 0) {
+                try validation.addError(item.id, "Selector must have 'options' array with at least one option");
             }
-        }
-    }
-    
-    // Check for items that exist but are never referenced
-    var orphaned_count: u32 = 0;
-    menu_iterator = menu_config.items.iterator();
-    while (menu_iterator.next()) |entry| {
-        const item_id = entry.key_ptr.*;
-        const menu_item = entry.value_ptr;
-        
-        // Skip root menu and items with parents
-        if (std.mem.eql(u8, item_id, "__root__") or 
-            std.mem.eql(u8, item_id, menu_config.root_menu_id)) {
-            continue;
-        }
-        
-        // Check if this item is referenced anywhere
-        if (!referenced_ids.contains(item_id)) {
-            std.debug.print("WARNING: Menu item '{s}' ({s}) is defined but never referenced\n", .{item_id, menu_item.name});
-            orphaned_count += 1;
-        }
-    }
-    
-    if (orphaned_count == 0) {
-        std.debug.print("OK: No orphaned menu items found\n", .{});
-    } else {
-        std.debug.print("Found {} orphaned menu items\n", .{orphaned_count});
-        found_errors = true;
-    }
-    
-    // Validate individual menu items
-    std.debug.print("\nValidating menu item configuration...\n", .{});
-    
-    menu_iterator = menu_config.items.iterator();
-    while (menu_iterator.next()) |entry| {
-        const item_id = entry.key_ptr.*;
-        const menu_item = entry.value_ptr;
-        
-        // Skip root menu validation
-        if (std.mem.eql(u8, item_id, "__root__")) continue;
-        
-        // Check for missing name or description
-        if (menu_item.name.len == 0) {
-            std.debug.print("ERROR: Menu item '{s}' has no name\n", .{item_id});
-            found_errors = true;
-        }
-        
-        if (menu_item.description.len == 0) {
-            std.debug.print("WARNING: Menu item '{s}' has no description\n", .{item_id});
-        }
-        
-        // Validate based on menu item type
-        switch (menu_item.type) {
-            .action => {
-                if (menu_item.command == null) {
-                    std.debug.print("ERROR: Action item '{s}' has no command configured\n", .{item_id});
-                    found_errors = true;
-                }
-            },
-            .submenu => {
-                if (menu_item.item_ids == null or menu_item.item_ids.?.len == 0) {
-                    std.debug.print("ERROR: Submenu item '{s}' has no child items\n", .{item_id});
-                    found_errors = true;
-                }
-            },
-            .menu => {
-                if (menu_item.item_ids == null or menu_item.item_ids.?.len == 0) {
-                    std.debug.print("ERROR: Menu item '{s}' has no child items\n", .{item_id});
-                    found_errors = true;
-                }
-            },
-            .selector => {
-                if (menu_item.options == null or menu_item.options.?.len == 0) {
-                    std.debug.print("ERROR: Selector item '{s}' has no options configured\n", .{item_id});
-                    found_errors = true;
-                } else {
-                    std.debug.print("OK: Selector item '{s}' has {} options\n", .{item_id, menu_item.options.?.len});
-                }
-                
-                // Check if default value is valid
-                if (menu_item.default_value) |default_val| {
-                    if (menu_item.options) |options| {
-                        var valid_default = false;
-                        for (options) |option| {
-                            if (std.mem.eql(u8, option, default_val)) {
-                                valid_default = true;
-                                break;
-                            }
-                        }
-                        if (!valid_default) {
-                            std.debug.print("ERROR: Selector item '{s}' has invalid default value '{s}'\n", .{item_id, default_val});
-                            found_errors = true;
-                        }
-                    }
-                }
-            },
-            .multiple_selection => {
-                if (menu_item.multiple_options == null or menu_item.multiple_options.?.len == 0) {
-                    std.debug.print("ERROR: Multiple selection item '{s}' has no options configured\n", .{item_id});
-                    found_errors = true;
-                } else {
-                    std.debug.print("OK: Multiple selection item '{s}' has {} options\n", .{item_id, menu_item.multiple_options.?.len});
-                }
-                
-                // Check if defaults are valid
-                if (menu_item.multiple_defaults) |defaults| {
-                    if (menu_item.multiple_options) |options| {
-                        for (defaults) |default_val| {
-                            var valid_default = false;
-                            for (options) |option| {
-                                if (std.mem.eql(u8, option, default_val)) {
-                                    valid_default = true;
-                                    break;
-                                }
-                            }
-                            if (!valid_default) {
-                                std.debug.print("ERROR: Multiple selection item '{s}' has invalid default value '{s}'\n", .{item_id, default_val});
-                                found_errors = true;
-                            }
-                        }
-                    }
-                }
-                
-                // Check for install_key requirement
-                if (menu_item.install_key == null) {
-                    std.debug.print("WARNING: Multiple selection item '{s}' has no install_key configured\n", .{item_id});
-                }
+            
+            if (item.install_key == null) {
+                try validation.addError(item.id, "Selector must have 'install_key' field to specify variable name");
             }
-        }
-    }
-    
-    // Check for circular references in menu structure
-    std.debug.print("\nChecking for circular references in menu structure...\n", .{});
-    
-    var visited = std.HashMap([]const u8, bool, std.hash_map.StringContext, std.hash_map.default_max_load_percentage).init(allocator);
-    defer {
-        var iter = visited.iterator();
-        while (iter.next()) |entry| {
-            allocator.free(entry.key_ptr.*);
-        }
-        visited.deinit();
-    }
-    
-    var recursion_stack = std.HashMap([]const u8, bool, std.hash_map.StringContext, std.hash_map.default_max_load_percentage).init(allocator);
-    defer {
-        var iter = recursion_stack.iterator();
-        while (iter.next()) |entry| {
-            allocator.free(entry.key_ptr.*);
-        }
-        recursion_stack.deinit();
-    }
-    
-    if (checkCircularReferences(allocator, &menu_config, menu_config.root_menu_id, &visited, &recursion_stack)) |has_cycles| {
-        if (has_cycles) {
-            std.debug.print("ERROR: Circular reference detected in menu structure\n", .{});
-            found_errors = true;
-        } else {
-            std.debug.print("OK: No circular references found in menu structure\n", .{});
-        }
-    } else |err| {
-        std.debug.print("WARNING: Could not complete circular reference check: {}\n", .{err});
-    }
-    
-    // Summary
-    std.debug.print("\n--- Menu Lint Results ---\n", .{});
-    if (found_errors) {
-        std.debug.print("FAILED: Menu configuration has critical errors that need to be fixed.\n", .{});
-    } else {
-        std.debug.print("PASSED: No critical errors found. The menu should work properly.\n", .{});
+            
+            // Check for invalid fields that should not be on selectors
+            if (item.multiple_options != null) {
+                try validation.addError(item.id, "Selector cannot have 'multiple_options' field - use 'options' instead");
+            }
+            if (item.multiple_defaults != null) {
+                try validation.addError(item.id, "Selector cannot have 'multiple_defaults' field - use 'default' instead");
+            }
+            if (item.command != null) {
+                try validation.addError(item.id, "Selector cannot have 'command' field - selectors don't execute commands");
+            }
+        },
+        .multiple_selection => {
+            // Validate multiple_selection-specific fields
+            if (item.multiple_options == null or item.multiple_options.?.len == 0) {
+                try validation.addError(item.id, "Multiple selection must have 'options' array with at least one option");
+            }
+            
+            if (item.install_key == null) {
+                try validation.addError(item.id, "Multiple selection must have 'install_key' field to specify variable name");
+            }
+            
+            // Check for invalid fields that should not be on multiple_selections
+            if (item.options != null) {
+                try validation.addError(item.id, "Multiple selection cannot have single 'options' field - this is parsed into 'multiple_options'");
+            }
+            if (item.default_value != null) {
+                try validation.addError(item.id, "Multiple selection cannot have 'default' field - use 'defaults' array instead");
+            }
+            if (item.command != null) {
+                try validation.addError(item.id, "Multiple selection cannot have 'command' field - selections don't execute commands");
+            }
+        },
+        .action => {
+            // Validate action-specific fields
+            if (item.command == null) {
+                try validation.addError(item.id, "Action must have 'command' field");
+            }
+            
+            // Check for invalid fields that should not be on actions
+            if (item.options != null) {
+                try validation.addError(item.id, "Action cannot have 'options' field - actions don't have selectable options");
+            }
+            if (item.multiple_options != null) {
+                try validation.addError(item.id, "Action cannot have 'multiple_options' field - actions don't have selectable options");
+            }
+            if (item.install_key != null) {
+                try validation.addError(item.id, "Action cannot have 'install_key' field - actions don't save selections");
+            }
+            if (item.default_value != null) {
+                try validation.addError(item.id, "Action cannot have 'default' field - actions don't have default values");
+            }
+            if (item.multiple_defaults != null) {
+                try validation.addError(item.id, "Action cannot have 'defaults' field - actions don't have default values");
+            }
+        },
+        .submenu => {
+            // Validate submenu-specific fields
+            // Check for invalid fields that should not be on submenus
+            if (item.command != null) {
+                try validation.addError(item.id, "Submenu cannot have 'command' field - submenus contain other items, they don't execute commands");
+            }
+            if (item.options != null) {
+                try validation.addError(item.id, "Submenu cannot have 'options' field - submenus don't have selectable options");
+            }
+            if (item.multiple_options != null) {
+                try validation.addError(item.id, "Submenu cannot have 'multiple_options' field - submenus don't have selectable options");
+            }
+            if (item.install_key != null) {
+                try validation.addError(item.id, "Submenu cannot have 'install_key' field - submenus don't save selections");
+            }
+        },
+        .menu => {
+            // Root menu item - similar to submenu but less strict
+        },
     }
 }
 
-fn checkCircularReferences(
-    allocator: std.mem.Allocator,
-    menu_config: *menu.MenuConfig,
-    current_id: []const u8,
-    visited: *std.HashMap([]const u8, bool, std.hash_map.StringContext, std.hash_map.default_max_load_percentage),
-    recursion_stack: *std.HashMap([]const u8, bool, std.hash_map.StringContext, std.hash_map.default_max_load_percentage)
-) !bool {
-    // Add to recursion stack
-    const stack_key = try allocator.dupe(u8, current_id);
-    try recursion_stack.put(stack_key, true);
-    defer {
-        _ = recursion_stack.remove(current_id);
-        allocator.free(stack_key);
+fn validateRawTOMLFields(validation: *ValidationResult, allocator: std.mem.Allocator, menu_toml_path: []const u8) !void {
+    const file_content = std.fs.cwd().readFileAlloc(allocator, menu_toml_path, 1024 * 1024) catch {
+        try validation.addError("file", "Cannot read TOML file for field validation");
+        return;
+    };
+    defer allocator.free(file_content);
+    
+    // Look for deprecated field names
+    if (std.mem.indexOf(u8, file_content, "variable_name")) |_| {
+        try validation.addError("deprecated", "Field 'variable_name' is not supported - use 'install_key' instead");
     }
     
-    const item = menu_config.items.get(current_id) orelse return false;
-    
-    if (item.item_ids) |child_ids| {
-        for (child_ids) |child_id| {
-            // Check if child is already in recursion stack (circular reference)
-            if (recursion_stack.contains(child_id)) {
-                return true;
-            }
-            
-            // Recursively check child
-            if (try checkCircularReferences(allocator, menu_config, child_id, visited, recursion_stack)) {
-                return true;
-            }
+    // Check for common mistakes
+    var lines = std.mem.splitSequence(u8, file_content, "\n");
+    var line_num: u32 = 0;
+    while (lines.next()) |line| {
+        line_num += 1;
+        const trimmed = std.mem.trim(u8, line, " \t");
+        
+        if (std.mem.startsWith(u8, trimmed, "variable_name")) {
+            const msg = try std.fmt.allocPrint(allocator, "Line {}: 'variable_name' is invalid - use 'install_key'", .{line_num});
+            defer allocator.free(msg);
+            try validation.addError("field", msg);
+        }
+        
+        if (std.mem.startsWith(u8, trimmed, "multiple_selection_options")) {
+            const msg = try std.fmt.allocPrint(allocator, "Line {}: 'multiple_selection_options' is invalid - use 'options'", .{line_num});
+            defer allocator.free(msg);
+            try validation.addError("field", msg);
         }
     }
+}
+
+pub fn lintMenuFile(allocator: std.mem.Allocator, menu_toml_path: []const u8) !void {
+    std.debug.print("Linting menu file: {s}\n", .{menu_toml_path});
     
-    // Mark as visited
-    const visited_key = try allocator.dupe(u8, current_id);
-    try visited.put(visited_key, true);
-    
-    return false;
+    const is_valid = try validateMenuStrict(allocator, menu_toml_path);
+    if (is_valid) {
+        std.debug.print("Menu validation passed - no errors found.\n", .{});
+    }
 }
