@@ -11,8 +11,9 @@ pub const AppConfig = struct {
     config_file: ?[]const u8 = null,
     theme_spec: ?[]const u8 = null,
     install_config_dir: ?[]const u8 = null,
-    read_configuration_options: ?[]const u8 = null,
+    config_options: ?[]const u8 = null,
     lint_menu_file: ?[]const u8 = null,
+    write_theme_path: ?[]const u8 = null,
 };
 
 pub fn printVersion() void {
@@ -22,18 +23,27 @@ pub fn printVersion() void {
 }
 
 pub fn printHelp() void {
-    std.debug.print("Nocturne TUI - Terminal interface for Nocturne desktop environment\n\n", .{});
-    std.debug.print("Usage: nwizard [OPTIONS]\n\n", .{});
-    std.debug.print("Options:\n", .{});
-    std.debug.print("  -v, --version    Show version information\n", .{});
-    std.debug.print("  -h, --help       Show this help message\n", .{});
-    std.debug.print("  -n, --no-sudo    Skip sudo authentication (for testing)\n", .{});
-    std.debug.print("  -c, --config     Path to custom configuration file (default: ~/.config/nwizard/menu.toml)\n", .{});
-    std.debug.print("  -t, --theme      Theme name (nocturne, forest, water, nature, fire) or path to theme.toml file (default: nocturne)\n", .{});
-    std.debug.print("      --install-config-dir Directory to store install.toml configuration (default: same as menu.toml)\n", .{});
-    std.debug.print("      --read-configuration-options PATH Read install.toml and export as NWIZ_* environment variables (implies --no-sudo)\n", .{});
-    std.debug.print("      --lint PATH      Validate menu.toml file structure and check for issues (implies --no-sudo)\n", .{});
-    std.debug.print("      --show-themes Show all available built-in themes with color preview\n", .{});
+    std.debug.print("USAGE:\n", .{});
+    std.debug.print("  nwizard [OPTIONS]\n\n", .{});
+    
+    std.debug.print("GENERAL OPTIONS:\n", .{});
+    std.debug.print("  -h, --help                         Show this help message\n", .{});
+    std.debug.print("  -v, --version                      Show version information\n", .{});
+    std.debug.print("  -n, --no-sudo                      Skip sudo authentication\n", .{});
+    std.debug.print("\n", .{});
+    
+    std.debug.print("CONFIGURATION:\n", .{});
+    std.debug.print("  -c, --config <PATH>                Custom menu configuration file\n", .{});
+    std.debug.print("  -t, --theme <NAME|PATH>            Theme name or path to theme.toml file\n", .{});
+    std.debug.print("      --install-config-dir <PATH>    Directory to store install.toml\n", .{});
+    std.debug.print("\n", .{});
+    
+    std.debug.print("UTILITY COMMANDS:\n", .{});
+    std.debug.print("      --lint <PATH>                  Validate menu.toml file structure\n", .{});
+    std.debug.print("      --show-themes                  Show all built-in themes with preview\n", .{});
+    std.debug.print("      --write-theme <PATH>           Export theme to TOML file and exit\n", .{});
+    std.debug.print("      --config-options <PATH>        Export install.toml as NWIZ_* variables\n", .{});
+    std.debug.print("\n", .{});
 }
 
 pub fn showThemes() void {
@@ -79,6 +89,30 @@ pub fn showThemes() void {
     
     std.debug.print("You can also use custom theme files:\n", .{});
     std.debug.print("  nwizard --theme /path/to/custom-theme.toml\n\n", .{});
+}
+
+pub fn writeTheme(allocator: std.mem.Allocator, theme_spec: ?[]const u8, output_path: []const u8) void {
+    // Determine which theme to write
+    const selected_theme = if (theme_spec) |spec| blk: {
+        if (theme.BuiltinTheme.fromString(spec)) |builtin| {
+            std.debug.print("Exporting built-in theme '{s}' to: {s}\n", .{ builtin.getName(), output_path });
+            break :blk theme.Theme.createBuiltinTheme(builtin);
+        } else {
+            std.debug.print("Error: Unknown theme '{s}'. Use --show-themes to see available themes.\n", .{spec});
+            return;
+        }
+    } else blk: {
+        std.debug.print("Exporting default theme 'nocturne' to: {s}\n", .{output_path});
+        break :blk theme.Theme.init(); // Default nocturne theme
+    };
+    
+    // Write the theme to file
+    theme.writeThemeToFile(allocator, selected_theme, output_path) catch |err| {
+        std.debug.print("Failed to write theme file: {}\n", .{err});
+        return;
+    };
+    
+    std.debug.print("Theme successfully exported!\n", .{});
 }
 
 pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
@@ -128,14 +162,14 @@ pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
                 return app_config;
             }
             app_config.install_config_dir = try allocator.dupe(u8, args[i]);
-        } else if (std.mem.eql(u8, arg, "--read-configuration-options")) {
+        } else if (std.mem.eql(u8, arg, "--config-options")) {
             i += 1;
             if (i >= args.len) {
-                std.debug.print("Error: --read-configuration-options requires an install.toml file path\n", .{});
+                std.debug.print("Error: --config-options requires an install.toml file path\n", .{});
                 app_config.should_continue = false;
                 return app_config;
             }
-            app_config.read_configuration_options = try allocator.dupe(u8, args[i]);
+            app_config.config_options = try allocator.dupe(u8, args[i]);
             app_config.use_sudo = false;
         } else if (std.mem.eql(u8, arg, "--lint")) {
             i += 1;
@@ -145,6 +179,15 @@ pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
                 return app_config;
             }
             app_config.lint_menu_file = try allocator.dupe(u8, args[i]);
+            app_config.use_sudo = false;
+        } else if (std.mem.eql(u8, arg, "--write-theme")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --write-theme requires a file path\n", .{});
+                app_config.should_continue = false;
+                return app_config;
+            }
+            app_config.write_theme_path = try allocator.dupe(u8, args[i]);
             app_config.use_sudo = false;
         } else {
             std.debug.print("Error: Unknown argument '{s}'\n", .{arg});
@@ -167,10 +210,13 @@ pub fn deinitAppConfig(allocator: std.mem.Allocator, app_config: *const AppConfi
     if (app_config.install_config_dir) |install_config_dir| {
         allocator.free(install_config_dir);
     }
-    if (app_config.read_configuration_options) |read_config_path| {
-        allocator.free(read_config_path);
+    if (app_config.config_options) |config_options_path| {
+        allocator.free(config_options_path);
     }
     if (app_config.lint_menu_file) |lint_path| {
         allocator.free(lint_path);
+    }
+    if (app_config.write_theme_path) |write_theme_path| {
+        allocator.free(write_theme_path);
     }
 }

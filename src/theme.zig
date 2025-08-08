@@ -11,6 +11,9 @@ pub const BuiltinTheme = enum {
     water,
     nature,
     fire,
+    rainbow,
+    greyscale,
+    high_contrast,
     
     pub fn fromString(name: []const u8) ?BuiltinTheme {
         // Convert input to lowercase for case-insensitive matching
@@ -28,6 +31,9 @@ pub const BuiltinTheme = enum {
         if (std.mem.eql(u8, lowercase_name, "water")) return .water;
         if (std.mem.eql(u8, lowercase_name, "nature")) return .nature;
         if (std.mem.eql(u8, lowercase_name, "fire")) return .fire;
+        if (std.mem.eql(u8, lowercase_name, "rainbow")) return .rainbow;
+        if (std.mem.eql(u8, lowercase_name, "greyscale")) return .greyscale;
+        if (std.mem.eql(u8, lowercase_name, "high_contrast")) return .high_contrast;
         
         // Fuzzy matching - find theme that starts with the input
         const themes = getAllThemes();
@@ -56,11 +62,14 @@ pub const BuiltinTheme = enum {
             .water => "water",
             .nature => "nature",
             .fire => "fire",
+            .rainbow => "rainbow",
+            .greyscale => "greyscale",
+            .high_contrast => "high_contrast",
         };
     }
     
     pub fn getAllThemes() []const BuiltinTheme {
-        return &[_]BuiltinTheme{ .nocturne, .forest, .water, .nature, .fire };
+        return &[_]BuiltinTheme{ .nocturne, .forest, .water, .nature, .fire, .rainbow, .greyscale, .high_contrast };
     }
 };
 
@@ -289,6 +298,126 @@ pub const Theme = struct {
         };
     }
     
+    pub fn createRainbowTheme() Theme {
+        const gradient = [10]ThemeColor{
+            // Red
+            ThemeColor{ .r = 0xff, .g = 0x00, .b = 0x00 },
+            // Orange  
+            ThemeColor{ .r = 0xff, .g = 0x7f, .b = 0x00 },
+            // Yellow
+            ThemeColor{ .r = 0xff, .g = 0xff, .b = 0x00 },
+            // Light Green
+            ThemeColor{ .r = 0x7f, .g = 0xff, .b = 0x00 },
+            // Green
+            ThemeColor{ .r = 0x00, .g = 0xff, .b = 0x00 },
+            // Cyan
+            ThemeColor{ .r = 0x00, .g = 0xff, .b = 0xff },
+            // Light Blue
+            ThemeColor{ .r = 0x00, .g = 0x7f, .b = 0xff },
+            // Blue
+            ThemeColor{ .r = 0x00, .g = 0x00, .b = 0xff },
+            // Purple
+            ThemeColor{ .r = 0x7f, .g = 0x00, .b = 0xff },
+            // Magenta
+            ThemeColor{ .r = 0xff, .g = 0x00, .b = 0xff },
+        };
+        
+        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+        const dark_grey = ThemeColor{ .r = 0x66, .g = 0x66, .b = 0x66 };
+        
+        return Theme{
+            .gradient = gradient,
+            .white = white,
+            .light_grey = light_grey,
+            .dark_grey = dark_grey,
+            .ascii_art = gradient,
+            .selected_menu_item = gradient[0], // Red
+            .unselected_menu_item = light_grey,
+            .menu_header = gradient[2], // Yellow
+            .footer_text = dark_grey,
+            .menu_item_comment = gradient[5], // Cyan
+            .menu_description = dark_grey,
+            .selector_option = gradient[4], // Green
+            .selector_selected_option = gradient[4], // Green
+            .border = gradient[7], // Blue
+        };
+    }
+    
+    pub fn createGreyscaleTheme() Theme {
+        const gradient = [10]ThemeColor{
+            // Medium grey to light grey gradient (lightened from original)
+            ThemeColor{ .r = 0x40, .g = 0x40, .b = 0x40 }, // Lighter start
+            ThemeColor{ .r = 0x50, .g = 0x50, .b = 0x50 },
+            ThemeColor{ .r = 0x60, .g = 0x60, .b = 0x60 },
+            ThemeColor{ .r = 0x70, .g = 0x70, .b = 0x70 },
+            ThemeColor{ .r = 0x80, .g = 0x80, .b = 0x80 },
+            ThemeColor{ .r = 0x90, .g = 0x90, .b = 0x90 },
+            ThemeColor{ .r = 0xa0, .g = 0xa0, .b = 0xa0 },
+            ThemeColor{ .r = 0xb0, .g = 0xb0, .b = 0xb0 },
+            ThemeColor{ .r = 0xc0, .g = 0xc0, .b = 0xc0 },
+            ThemeColor{ .r = 0xd0, .g = 0xd0, .b = 0xd0 },
+        };
+        
+        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+        const dark_grey = ThemeColor{ .r = 0x50, .g = 0x50, .b = 0x50 };
+        
+        return Theme{
+            .gradient = gradient,
+            .white = white,
+            .light_grey = light_grey,
+            .dark_grey = dark_grey,
+            .ascii_art = gradient,
+            .selected_menu_item = gradient[1],
+            .unselected_menu_item = gradient[7],
+            .menu_header = gradient[2],
+            .footer_text = gradient[5],
+            .menu_item_comment = gradient[6],
+            .menu_description = gradient[5],
+            .selector_option = gradient[3],
+            .selector_selected_option = gradient[3],
+            .border = gradient[6],
+        };
+    }
+    
+    pub fn createHighContrastTheme() Theme {
+        const gradient = [10]ThemeColor{
+            // High contrast theme with bright, easily distinguishable colors
+            ThemeColor{ .r = 0xff, .g = 0xff, .b = 0x00 }, // Bright Yellow
+            ThemeColor{ .r = 0xff, .g = 0x00, .b = 0xff }, // Bright Magenta
+            ThemeColor{ .r = 0x00, .g = 0xff, .b = 0xff }, // Bright Cyan
+            ThemeColor{ .r = 0x00, .g = 0xff, .b = 0x00 }, // Bright Green
+            ThemeColor{ .r = 0xff, .g = 0x80, .b = 0x00 }, // Bright Orange
+            ThemeColor{ .r = 0x80, .g = 0x00, .b = 0xff }, // Bright Purple
+            ThemeColor{ .r = 0xff, .g = 0x00, .b = 0x80 }, // Bright Pink
+            ThemeColor{ .r = 0x00, .g = 0x80, .b = 0xff }, // Bright Blue
+            ThemeColor{ .r = 0x80, .g = 0xff, .b = 0x00 }, // Bright Lime
+            ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff }, // Pure White
+        };
+        
+        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
+        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
+        const dark_grey = ThemeColor{ .r = 0x00, .g = 0x00, .b = 0x00 };
+        
+        return Theme{
+            .gradient = gradient,
+            .white = white,
+            .light_grey = light_grey,
+            .dark_grey = dark_grey,
+            .ascii_art = gradient,
+            .selected_menu_item = gradient[0], // Bright Yellow
+            .unselected_menu_item = white,
+            .menu_header = gradient[2], // Bright Cyan
+            .footer_text = light_grey,
+            .menu_item_comment = gradient[1], // Bright Magenta
+            .menu_description = light_grey,
+            .selector_option = gradient[3], // Bright Green
+            .selector_selected_option = gradient[0], // Bright Yellow
+            .border = gradient[9], // Pure White
+        };
+    }
+    
     pub fn createBuiltinTheme(builtin: BuiltinTheme) Theme {
         return switch (builtin) {
             .nocturne => Theme.init(),
@@ -296,6 +425,9 @@ pub const Theme = struct {
             .water => Theme.createBlueTheme(),
             .nature => Theme.createOrangeTheme(),
             .fire => Theme.createRedTheme(),
+            .rainbow => Theme.createRainbowTheme(),
+            .greyscale => Theme.createGreyscaleTheme(),
+            .high_contrast => Theme.createHighContrastTheme(),
         };
     }
 
@@ -549,4 +681,45 @@ pub fn loadThemeFromFile(allocator: std.mem.Allocator, file_path: []const u8) !T
     }
 
     return theme;
+}
+
+pub fn writeThemeToFile(allocator: std.mem.Allocator, theme_instance: Theme, file_path: []const u8) !void {
+    _ = allocator; // Suppress unused parameter warning
+    const file = std.fs.cwd().createFile(file_path, .{}) catch |err| {
+        std.debug.print("Failed to create theme file '{s}': {}\n", .{ file_path, err });
+        return err;
+    };
+    defer file.close();
+    
+    var writer = file.writer();
+    
+    // Write theme header
+    try writer.print("# Generated theme file by nwizard\n", .{});
+    try writer.print("# This theme can be used with: nwizard --theme {s}\n\n", .{file_path});
+    
+    // Write gradient section
+    try writer.print("[gradient]\n", .{});
+    for (theme_instance.gradient, 0..) |color, i| {
+        try writer.print("color{d} = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ i + 1, color.r, color.g, color.b });
+    }
+    try writer.print("\n", .{});
+    
+    // Write colors section
+    try writer.print("[colors]\n", .{});
+    try writer.print("white = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.white.r, theme_instance.white.g, theme_instance.white.b });
+    try writer.print("light_grey = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.light_grey.r, theme_instance.light_grey.g, theme_instance.light_grey.b });
+    try writer.print("dark_grey = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.dark_grey.r, theme_instance.dark_grey.g, theme_instance.dark_grey.b });
+    try writer.print("\n", .{});
+    
+    // Write UI section
+    try writer.print("[ui]\n", .{});
+    try writer.print("selected_menu_item = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.selected_menu_item.r, theme_instance.selected_menu_item.g, theme_instance.selected_menu_item.b });
+    try writer.print("unselected_menu_item = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.unselected_menu_item.r, theme_instance.unselected_menu_item.g, theme_instance.unselected_menu_item.b });
+    try writer.print("menu_header = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.menu_header.r, theme_instance.menu_header.g, theme_instance.menu_header.b });
+    try writer.print("footer_text = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.footer_text.r, theme_instance.footer_text.g, theme_instance.footer_text.b });
+    try writer.print("menu_item_comment = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.menu_item_comment.r, theme_instance.menu_item_comment.g, theme_instance.menu_item_comment.b });
+    try writer.print("menu_description = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.menu_description.r, theme_instance.menu_description.g, theme_instance.menu_description.b });
+    try writer.print("selector_option = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.selector_option.r, theme_instance.selector_option.g, theme_instance.selector_option.b });
+    try writer.print("selector_selected_option = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.selector_selected_option.r, theme_instance.selector_selected_option.g, theme_instance.selector_selected_option.b });
+    try writer.print("border = \"#{X:0>2}{X:0>2}{X:0>2}\"\n", .{ theme_instance.border.r, theme_instance.border.g, theme_instance.border.b });
 }
