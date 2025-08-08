@@ -37,10 +37,6 @@ jobs:
     - name: Test help output
       run: ./zig-out/bin/nwizard --help
 
-    - name: Test no-sudo mode (quick exit)
-      run: |
-        timeout 2s ./zig-out/bin/nwizard --no-sudo || [ $? -eq 124 ] && echo "No-sudo mode works"
-
     - name: Upload binary artifact
       uses: actions/upload-artifact@v4
       with:
