@@ -59,10 +59,19 @@ nwizard --no-sudo
 nwizard --lint menu.toml
 
 # Export configuration as environment variables
-eval $(nwizard --read-configuration-options install.toml)
+eval $(nwizard --config-options install.toml)
 
-# Show available themes
+# List available theme names only
+nwizard --list-themes
+
+# Preview a single specific theme
+nwizard --show-theme forest
+
+# Preview ALL themes at once
 nwizard --show-themes
+
+# Export theme to file
+nwizard --theme rainbow --write-theme my-theme.toml
 ```
 
 ### Navigation

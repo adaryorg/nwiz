@@ -35,15 +35,25 @@ nwizard --config /path/to/menu.toml
 The application supports several command line options:
 
 ```bash
-nwizard --help                    # Show help information
-nwizard --version                 # Display version information
-nwizard --no-sudo                 # Run without sudo authentication
-nwizard --config <path>           # Use custom menu configuration
-nwizard --theme <name>            # Use specific theme (built-in or file path)
-nwizard --install-config-dir <path>  # Custom directory for install.toml
-nwizard --lint <menu.toml>        # Validate menu configuration file
-nwizard --config-options <install.toml>  # Export config as environment variables
-nwizard --write-theme <path>      # Export theme to TOML file and exit
+# General options
+nwizard -h, --help                    # Show help information
+nwizard -v, --version                 # Display version information
+nwizard -n, --no-sudo                 # Run without sudo authentication
+
+# Configuration
+nwizard -c, --config <path>           # Use custom menu configuration
+nwizard -t, --theme <name|path>       # Use theme name (built-in) or file path
+nwizard --install-config-dir <path>   # Custom directory for install.toml
+
+# Theme utilities
+nwizard --list-themes                 # List available built-in theme names only
+nwizard --show-theme <name>           # Preview a single specific theme
+nwizard --show-themes                 # Preview ALL built-in themes at once
+nwizard --write-theme <path>          # Export current theme to TOML file
+
+# Validation and scripting
+nwizard --lint <menu.toml>            # Validate menu configuration file
+nwizard --config-options <install.toml>  # Export config as NWIZ_* env variables
 ```
 
 ### Navigation
