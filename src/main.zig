@@ -20,6 +20,8 @@ const app_init = @import("app_init.zig");
 const install_integration = @import("install_integration.zig");
 const event_handler = @import("event_handler.zig");
 const disclaimer = @import("disclaimer.zig");
+const app_context = @import("app_context.zig");
+const error_handler = @import("error_handler.zig");
 
 var global_async_executor: ?*executor.AsyncCommandExecutor = null;
 pub var global_shell_pid: ?std.posix.pid_t = null;
@@ -81,9 +83,13 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Parse command line arguments first
-    const app_config = cli.parseArgs(allocator) catch |err| {
-        std.debug.print("Error parsing arguments: {}\n", .{err});
+    // Initialize global error handler
+    var err_handler = error_handler.ErrorHandler.init(allocator);
+    error_handler.setGlobalErrorHandler(&err_handler);
+
+    // Parse and handle command line arguments
+    const app_config = parseAndHandleArgs(allocator) catch |err| {
+        err_handler.handleError(err, .general, "Failed to parse command line arguments");
         return;
     };
     defer cli.deinitAppConfig(allocator, &app_config);
@@ -92,25 +98,46 @@ pub fn main() !void {
         return;
     }
 
+    // Handle special modes (config options, lint, theme export)
+    if (try handleSpecialModes(allocator, &app_config)) {
+        return;
+    }
+
+    // Set up signal handlers and authentication
+    try setupSignalHandlers();
+    try handleAuthentication(&app_config);
+
+    // Validate configuration and start TUI
+    try validateAndStartTUI(allocator, &app_config, &err_handler);
+}
+
+fn parseAndHandleArgs(allocator: std.mem.Allocator) !cli.AppConfig {
+    return cli.parseArgs(allocator);
+}
+
+fn handleSpecialModes(allocator: std.mem.Allocator, app_config: *const cli.AppConfig) !bool {
     // Handle special read-configuration-options mode
     if (app_config.config_options) |install_toml_path| {
         try readConfigurationOptionsMode(allocator, install_toml_path);
-        return;
+        return true;
     }
 
     // Handle lint mode
     if (app_config.lint_menu_file) |menu_toml_path| {
         try lintMenuMode(allocator, menu_toml_path);
-        return;
+        return true;
     }
 
     // Handle write-theme mode
     if (app_config.write_theme_path) |output_path| {
         cli.writeTheme(allocator, app_config.theme_spec, output_path);
-        return;
+        return true;
     }
 
-    // Set up signal handlers
+    return false;
+}
+
+fn setupSignalHandlers() !void {
     const sig_action = std.posix.Sigaction{
         .handler = .{ .handler = signalHandler },
         .mask = std.posix.empty_sigset,
@@ -118,52 +145,51 @@ pub fn main() !void {
     };
     _ = std.posix.sigaction(std.posix.SIG.INT, &sig_action, null);
     _ = std.posix.sigaction(std.posix.SIG.TERM, &sig_action, null);
+}
 
+fn handleAuthentication(app_config: *const cli.AppConfig) !void {
     // Authenticate sudo BEFORE TUI initialization (if enabled)
     if (app_config.use_sudo) {
-        const auth_success = try sudo.authenticateInitial();
+        const auth_success = sudo.authenticateInitial() catch |err| {
+            error_handler.handleGlobalError(err, .authentication, "Failed to initialize sudo authentication");
+            return err;
+        };
         if (!auth_success) {
-            return;
+            error_handler.handleGlobalError(error.AuthenticationFailed, .authentication, "Sudo authentication was rejected");
+            return error.AuthenticationFailed;
         }
     } else {
-        std.debug.print("Running in no-sudo mode - commands requiring privileges may fail.\n", .{});
+        if (error_handler.global_error_handler) |handler| {
+            handler.logInfo("Running in no-sudo mode - commands requiring privileges may fail");
+        }
     }
+}
 
+fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppConfig, err_handler: *const error_handler.ErrorHandler) !void {
     // Validate menu configuration before proceeding
     const menu_config_path = app_config.config_file orelse "~/.config/nwiz/menu.toml";
     const is_menu_valid = linter.validateMenuStrict(allocator, menu_config_path) catch |err| {
-        std.debug.print("Failed to validate menu configuration: {}\n", .{err});
+        error_handler.handleGlobalError(err, .config, "Failed to validate menu configuration");
         return;
     };
     if (!is_menu_valid) {
+        error_handler.handleGlobalError(error.InvalidMenuConfig, .config, "Menu configuration validation failed");
         return;
     }
 
     // Load configurations
-    var configs = try app_init.loadConfigurations(allocator, app_config);
+    var configs = try app_init.loadConfigurations(allocator, app_config.*);
     defer configs.deinit(allocator);
 
+    // Initialize and run TUI
+    try initializeAndRunTUI(allocator, &configs, app_config, err_handler);
+}
+
+fn initializeAndRunTUI(allocator: std.mem.Allocator, configs: *const app_init.ConfigurationResult, app_config: *const cli.AppConfig, err_handler: *const error_handler.ErrorHandler) !void {
     // Initialize vaxis with error handling
-    var tty = vaxis.Tty.init() catch |err| {
-        switch (err) {
-            error.Unexpected => {
-                std.debug.print("\n=== Terminal Access Error ===\n", .{});
-                std.debug.print("Error: Unable to access /dev/tty (errno: 6 - ENXIO)\n", .{});
-                std.debug.print("This typically indicates a terminal orphaning issue.\n", .{});
-                std.debug.print("\nSolutions to try:\n", .{});
-                std.debug.print("1. Run the application in a fresh terminal window\n", .{});
-                std.debug.print("2. If you recently ran sudo, restart your terminal session\n", .{});
-                std.debug.print("3. Make sure you're not running in an IDE console or subprocess\n", .{});
-                std.debug.print("4. Try running from a native terminal (xterm, gnome-terminal, etc.)\n", .{});
-                return;
-            },
-            else => {
-                std.debug.print("\n=== Terminal Initialization Error ===\n", .{});
-                std.debug.print("Error: {}\n", .{err});
-                std.debug.print("Please ensure you're running in a compatible terminal.\n", .{});
-                return err;
-            },
-        }
+    var tty = initializeTty() catch |err| {
+        handleTtyError(err);
+        return err;
     };
     terminal.global_tty = &tty;
     defer {
@@ -180,7 +206,6 @@ pub fn main() !void {
 
     var loop: vaxis.Loop(Event) = .{ .tty = &tty, .vaxis = &vx };
     try loop.init();
-
     try loop.start();
     defer loop.stop();
 
@@ -189,39 +214,60 @@ pub fn main() !void {
     
     try vx.queryTerminal(tty.anyWriter(), 1 * std.time.ns_per_s);
 
-    // Detect terminal mode (TTY vs PTY)
+    // Detect terminal mode and setup application
     const terminal_mode = tty_compat.detectTerminalMode();
     if (terminal_mode == .tty) {
         std.debug.print("Running in TTY mode - using ANSI 8-color palette and simple borders\n", .{});
     }
 
+    // Run the main application
+    try runMainApplication(allocator, &vx, &tty, &loop, configs, terminal_mode, app_config, err_handler);
+}
+
+fn initializeTty() !vaxis.Tty {
+    return vaxis.Tty.init();
+}
+
+fn handleTtyError(err: anyerror) void {
+    switch (err) {
+        error.Unexpected => {
+            std.debug.print("\n=== Terminal Access Error ===\n", .{});
+            std.debug.print("Error: Unable to access /dev/tty (errno: 6 - ENXIO)\n", .{});
+            std.debug.print("This typically indicates a terminal orphaning issue.\n", .{});
+            std.debug.print("\nSolutions to try:\n", .{});
+            std.debug.print("1. Run the application in a fresh terminal window\n", .{});
+            std.debug.print("2. If you recently ran sudo, restart your terminal session\n", .{});
+            std.debug.print("3. Make sure you're not running in an IDE console or subprocess\n", .{});
+            std.debug.print("4. Try running from a native terminal (xterm, gnome-terminal, etc.)\n", .{});
+        },
+        else => {
+            std.debug.print("\n=== Terminal Initialization Error ===\n", .{});
+            std.debug.print("Error: {}\n", .{err});
+            std.debug.print("Please ensure you're running in a compatible terminal.\n", .{});
+        },
+    }
+}
+
+fn runMainApplication(
+    allocator: std.mem.Allocator, 
+    vx: *vaxis.Vaxis, 
+    tty: *vaxis.Tty,
+    loop: *vaxis.Loop(Event),
+    configs: *const app_init.ConfigurationResult, 
+    terminal_mode: tty_compat.TerminalMode,
+    app_config: *const cli.AppConfig,
+    err_handler: *const error_handler.ErrorHandler
+) !void {
     // Extract references for easier access
-    const menu_config = &configs.menu_config;
-    const install_config = &configs.install_config;
+    var install_config = configs.install_config;
     const install_config_path = configs.install_config_path;
     const app_theme = &configs.app_theme;
 
-    var menu_state = menu.MenuState.init(allocator, menu_config, configs.menu_config_path) catch {
-        return;
-    };
-    defer menu_state.deinit();
+    // Create application context and setup application state
+    var app_ctx = app_context.AppContext.init(allocator, app_theme, terminal_mode, err_handler);
     
-    // Load existing selections from install.toml into menu state
-    try install_integration.loadInstallSelectionsIntoMenuState(allocator, &menu_state, install_config, menu_config);
-
-    // Initialize menu renderer
-    var menu_renderer = menu.MenuRenderer{ 
-        .theme = app_theme,
-        .terminal_mode = terminal_mode,
-    };
-
-    var async_command_executor = executor.AsyncCommandExecutor.init(allocator);
-    async_command_executor.setShell(menu_config.shell);
-    defer {
-        global_async_executor = null;
-        async_command_executor.deinit();
-    }
-    global_async_executor = &async_command_executor;
+    var application_state = try initializeApplicationState(allocator, configs, &app_ctx);
+    defer cleanupApplicationState(&application_state);
 
     // Start background thread to maintain sudo authentication (if enabled)
     const renewal_thread = if (app_config.use_sudo) try sudo.startBackgroundRenewal() else null;
@@ -232,51 +278,93 @@ pub fn main() !void {
         }
     }
 
-    // Application state
-    var app_state = AppState.menu;
-    var async_output_viewer: ?executor.AsyncOutputViewer = null;
-    var disclaimer_dialog: ?disclaimer.DisclaimerDialog = null;
-    
     // Set up event context
     var event_context = event_handler.EventContext{
-        .allocator = allocator,
-        .app_state = &app_state,
-        .menu_state = &menu_state,
-        .async_output_viewer = &async_output_viewer,
-        .async_command_executor = &async_command_executor,
-        .install_config = install_config,
+        .context = &app_ctx,
+        .app_state = &application_state.app_state,
+        .menu_state = &application_state.menu_state,
+        .async_output_viewer = &application_state.async_output_viewer,
+        .async_command_executor = &application_state.async_command_executor,
+        .install_config = &install_config,
         .install_config_path = install_config_path,
-        .app_theme = app_theme,
-        .terminal_mode = terminal_mode,
-        .vx = &vx,
+        .vx = vx,
         .global_shell_pid = &global_shell_pid,
         .global_async_executor = &global_async_executor,
-        .disclaimer_dialog = &disclaimer_dialog,
+        .disclaimer_dialog = &application_state.disclaimer_dialog,
     };
 
+    // Run the main event and render loop
+    try runMainLoop(allocator, vx, tty, loop, &event_context, &application_state);
+
+    // Comprehensive terminal restoration on normal exit
+    terminal.restoreTerminalCompletely();
+}
+
+const ApplicationState = struct {
+    menu_state: menu.MenuState,
+    menu_renderer: menu.MenuRenderer,
+    async_command_executor: executor.AsyncCommandExecutor,
+    app_state: event_handler.AppState,
+    async_output_viewer: ?executor.AsyncOutputViewer,
+    disclaimer_dialog: ?disclaimer.DisclaimerDialog,
+};
+
+fn initializeApplicationState(allocator: std.mem.Allocator, configs: *const app_init.ConfigurationResult, app_ctx: *const app_context.AppContext) !ApplicationState {
+    const menu_config = &configs.menu_config;
+    var install_config = configs.install_config;
+    
+    var menu_state = menu.MenuState.init(allocator, menu_config, configs.menu_config_path) catch {
+        return error.MenuStateInitFailed;
+    };
+    
+    // Load existing selections from install.toml into menu state
+    try install_integration.loadInstallSelectionsIntoMenuState(allocator, &menu_state, &install_config, menu_config);
+
+    // Initialize menu renderer
+    const menu_renderer = menu.MenuRenderer{ 
+        .theme = app_ctx.theme,
+        .terminal_mode = app_ctx.terminal_mode,
+    };
+
+    var async_command_executor = executor.AsyncCommandExecutor.init(allocator);
+    async_command_executor.setShell(menu_config.shell);
+    global_async_executor = &async_command_executor;
+
+    return ApplicationState{
+        .menu_state = menu_state,
+        .menu_renderer = menu_renderer,
+        .async_command_executor = async_command_executor,
+        .app_state = event_handler.AppState.menu,
+        .async_output_viewer = null,
+        .disclaimer_dialog = null,
+    };
+}
+
+fn cleanupApplicationState(app_state: *ApplicationState) void {
+    app_state.menu_state.deinit();
+    
+    // Clean up async output viewer if active
+    if (app_state.async_output_viewer) |*output_viewer| {
+        output_viewer.deinit();
+    }
+    
+    global_async_executor = null;
+    app_state.async_command_executor.deinit();
+}
+
+fn runMainLoop(
+    allocator: std.mem.Allocator,
+    vx: *vaxis.Vaxis,
+    tty: *vaxis.Tty,
+    loop: *vaxis.Loop(Event),
+    event_context: *event_handler.EventContext,
+    app_state: *ApplicationState
+) !void {
     // Main event loop
     var should_exit = false;
     while (!sudo.shouldShutdown() and !terminal.signal_exit_requested and !should_exit) {
-        // Check for events with timeout
-        while (loop.tryEvent()) |event| {
-            switch (event) {
-                .key_press => |key| {
-                    const result = event_handler.handleKeyPress(key, &event_context) catch |err| {
-                        std.debug.print("Error handling key press: {}\n", .{err});
-                        continue;
-                    };
-                    
-                    if (result == .shutdown_requested) {
-                        should_exit = true;
-                        break;
-                    }
-                },
-                .winsize => |ws| {
-                    try vx.resize(allocator, tty.anyWriter(), ws);
-                },
-                else => {},
-            }
-        }
+        // Handle events
+        should_exit = try handleEvents(allocator, vx, tty, loop, event_context);
         
         // Check for shutdown after processing events
         if (sudo.shouldShutdown() or terminal.signal_exit_requested) {
@@ -284,52 +372,76 @@ pub fn main() !void {
         }
 
         // Render the interface
-        const win = vx.window();
-        win.clear();
-
-        switch (app_state) {
-            .menu => {
-                menu_renderer.render(win, &menu_state);
-            },
-            .viewing_output => {
-                if (async_output_viewer) |*viewer| {
-                    viewer.render(win);
-                }
-            },
-            .viewing_disclaimer => {
-                // Render menu as background
-                menu_renderer.render(win, &menu_state);
-                
-                // Render disclaimer dialog on top
-                if (disclaimer_dialog) |*dialog| {
-                    try dialog.render(&vx);
-                }
-            },
-            .exit_confirmation => {
-                // Render the current view first (menu or output)
-                if (async_output_viewer) |*viewer| {
-                    viewer.render(win);
-                } else {
-                    menu_renderer.render(win, &menu_state);
-                }
-                
-                // Then render the exit confirmation overlay
-                ui_components.renderExitConfirmation(win, app_theme, terminal_mode);
-            },
-        }
-
-        try vx.render(tty.anyWriter());
+        try renderInterface(vx, tty, app_state);
         
         // Sleep for a short time to avoid excessive CPU usage
         std.time.sleep(25 * std.time.ns_per_ms); // 25ms for very responsive real-time output
     }
+}
 
-    // Clean up async output viewer if active
-    if (async_output_viewer) |*output_viewer| {
-        output_viewer.deinit();
+fn handleEvents(
+    allocator: std.mem.Allocator,
+    vx: *vaxis.Vaxis,
+    tty: *vaxis.Tty,
+    loop: *vaxis.Loop(Event),
+    event_context: *event_handler.EventContext
+) !bool {
+    // Check for events with timeout
+    while (loop.tryEvent()) |event| {
+        switch (event) {
+            .key_press => |key| {
+                const result = event_handler.handleKeyPress(key, event_context) catch |err| {
+                    error_handler.handleGlobalError(err, .general, "Error handling key press");
+                    continue;
+                };
+                
+                if (result == .shutdown_requested) {
+                    return true;
+                }
+            },
+            .winsize => |ws| {
+                try vx.resize(allocator, tty.anyWriter(), ws);
+            },
+            else => {},
+        }
     }
-    
-    // Clean up async command executor (already handled by defer)
-    // Comprehensive terminal restoration on normal exit
-    terminal.restoreTerminalCompletely();
+    return false;
+}
+
+fn renderInterface(vx: *vaxis.Vaxis, tty: *vaxis.Tty, app_state: *ApplicationState) !void {
+    const win = vx.window();
+    win.clear();
+
+    switch (app_state.app_state) {
+        .menu => {
+            app_state.menu_renderer.render(win, &app_state.menu_state);
+        },
+        .viewing_output => {
+            if (app_state.async_output_viewer) |*viewer| {
+                viewer.render(win);
+            }
+        },
+        .viewing_disclaimer => {
+            // Render menu as background
+            app_state.menu_renderer.render(win, &app_state.menu_state);
+            
+            // Render disclaimer dialog on top
+            if (app_state.disclaimer_dialog) |*dialog| {
+                try dialog.render(vx);
+            }
+        },
+        .exit_confirmation => {
+            // Render the current view first (menu or output)
+            if (app_state.async_output_viewer) |*viewer| {
+                viewer.render(win);
+            } else {
+                app_state.menu_renderer.render(win, &app_state.menu_state);
+            }
+            
+            // Then render the exit confirmation overlay
+            ui_components.renderExitConfirmation(win, app_state.menu_renderer.theme, app_state.menu_renderer.terminal_mode);
+        },
+    }
+
+    try vx.render(tty.anyWriter());
 }
