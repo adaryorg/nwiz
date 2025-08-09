@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const SessionLogger = struct {
     allocator: std.mem.Allocator,
@@ -29,21 +30,29 @@ pub const SessionLogger = struct {
         // Create or open log file for appending
         self.log_file = std.fs.cwd().createFile(self.log_file_path, .{ .truncate = false }) catch |err| switch (err) {
             error.AccessDenied => {
-                std.debug.print("Error: Cannot write to log file '{s}' - Access denied\n", .{self.log_file_path});
-                std.debug.print("Please check file permissions or choose a different log file location.\n", .{});
+                if (!builtin.is_test) {
+                    std.debug.print("Error: Cannot write to log file '{s}' - Access denied\n", .{self.log_file_path});
+                    std.debug.print("Please check file permissions or choose a different log file location.\n", .{});
+                }
                 return err;
             },
             error.IsDir => {
-                std.debug.print("Error: Log file path '{s}' is a directory\n", .{self.log_file_path});
-                std.debug.print("Please specify a file path for the log file.\n", .{});
+                if (!builtin.is_test) {
+                    std.debug.print("Error: Log file path '{s}' is a directory\n", .{self.log_file_path});
+                    std.debug.print("Please specify a file path for the log file.\n", .{});
+                }
                 return err;
             },
             error.NoSpaceLeft => {
-                std.debug.print("Error: No disk space available to create log file '{s}'\n", .{self.log_file_path});
+                if (!builtin.is_test) {
+                    std.debug.print("Error: No disk space available to create log file '{s}'\n", .{self.log_file_path});
+                }
                 return err;
             },
             else => {
-                std.debug.print("Error: Failed to create log file '{s}': {}\n", .{ self.log_file_path, err });
+                if (!builtin.is_test) {
+                    std.debug.print("Error: Failed to create log file '{s}': {}\n", .{ self.log_file_path, err });
+                }
                 return err;
             },
         };
@@ -139,21 +148,29 @@ pub const SessionLogger = struct {
         // Try to create/open the file for writing
         const file = std.fs.cwd().createFile(log_file_path, .{ .truncate = false }) catch |err| switch (err) {
             error.AccessDenied => {
-                std.debug.print("Error: Cannot write to log file '{s}' - Access denied\n", .{log_file_path});
-                std.debug.print("Please check file permissions or choose a different log file location.\n", .{});
+                if (!builtin.is_test) {
+                    std.debug.print("Error: Cannot write to log file '{s}' - Access denied\n", .{log_file_path});
+                    std.debug.print("Please check file permissions or choose a different log file location.\n", .{});
+                }
                 return err;
             },
             error.IsDir => {
-                std.debug.print("Error: Log file path '{s}' is a directory\n", .{log_file_path});
-                std.debug.print("Please specify a file path for the log file.\n", .{});
+                if (!builtin.is_test) {
+                    std.debug.print("Error: Log file path '{s}' is a directory\n", .{log_file_path});
+                    std.debug.print("Please specify a file path for the log file.\n", .{});
+                }
                 return err;
             },
             error.NoSpaceLeft => {
-                std.debug.print("Error: No disk space available to create log file '{s}'\n", .{log_file_path});
+                if (!builtin.is_test) {
+                    std.debug.print("Error: No disk space available to create log file '{s}'\n", .{log_file_path});
+                }
                 return err;
             },
             else => {
-                std.debug.print("Error: Failed to create log file '{s}': {}\n", .{ log_file_path, err });
+                if (!builtin.is_test) {
+                    std.debug.print("Error: Failed to create log file '{s}': {}\n", .{ log_file_path, err });
+                }
                 return err;
             },
         };

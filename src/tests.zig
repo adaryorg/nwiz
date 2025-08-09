@@ -12,4 +12,10 @@ comptime {
     _ = @import("executor_test.zig");
     _ = @import("menu_test.zig");
     _ = @import("theme_test.zig");
+    _ = @import("session_logger_test.zig");
+    _ = @import("cli_test.zig");
+    _ = @import("install_test.zig");
+    _ = @import("linter_test.zig");
+    _ = @import("sudo_test.zig");
+    _ = @import("error_handler_test.zig");
 }
