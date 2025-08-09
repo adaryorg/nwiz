@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Nocturne TUI (nwizard) is a terminal user interface application for managing system configurations, installations, and maintenance tasks through a menu-driven interface. This guide explains how to use the application, create custom menus, and integrate it with your scripts and workflows.
+Nocturne TUI (nwiz) is a terminal user interface application for managing system configurations, installations, and maintenance tasks through a menu-driven interface. This guide explains how to use the application, create custom menus, and integrate it with your scripts and workflows.
 
 ## Building and Installation
 
@@ -12,7 +12,7 @@ To build Nocturne TUI from source, you need Zig compiler version 0.13.0 or later
 zig build
 ```
 
-The compiled binary will be available at `./zig-out/bin/nwizard`. You can copy this binary to a location in your PATH for system-wide access.
+The compiled binary will be available at `./zig-out/bin/nwiz`. You can copy this binary to a location in your PATH for system-wide access.
 
 ## Basic Usage
 
@@ -21,13 +21,13 @@ The compiled binary will be available at `./zig-out/bin/nwizard`. You can copy t
 Run the application with:
 
 ```bash
-nwizard
+nwiz
 ```
 
-By default, nwizard looks for configuration files in `~/.config/nwizard/`. You can specify a custom menu configuration:
+By default, nwiz looks for configuration files in `~/.config/nwiz/`. You can specify a custom menu configuration:
 
 ```bash
-nwizard --config /path/to/menu.toml
+nwiz --config /path/to/menu.toml
 ```
 
 ### Command Line Options
@@ -36,24 +36,24 @@ The application supports several command line options:
 
 ```bash
 # General options
-nwizard -h, --help                    # Show help information
-nwizard -v, --version                 # Display version information
-nwizard -n, --no-sudo                 # Run without sudo authentication
+nwiz -h, --help                    # Show help information
+nwiz -v, --version                 # Display version information
+nwiz -n, --no-sudo                 # Run without sudo authentication
 
 # Configuration
-nwizard -c, --config <path>           # Use custom menu configuration
-nwizard -t, --theme <name|path>       # Use theme name (built-in) or file path
-nwizard --install-config-dir <path>   # Custom directory for install.toml
+nwiz -c, --config <path>           # Use custom menu configuration
+nwiz -t, --theme <name|path>       # Use theme name (built-in) or file path
+nwiz --install-config-dir <path>   # Custom directory for install.toml
 
 # Theme utilities
-nwizard --list-themes                 # List available built-in theme names only
-nwizard --show-theme <name>           # Preview a single specific theme
-nwizard --show-themes                 # Preview ALL built-in themes at once
-nwizard --write-theme <path>          # Export current theme to TOML file
+nwiz --list-themes                 # List available built-in theme names only
+nwiz --show-theme <name>           # Preview a single specific theme
+nwiz --show-themes                 # Preview ALL built-in themes at once
+nwiz --write-theme <path>          # Export current theme to TOML file
 
 # Validation and scripting
-nwizard --lint <menu.toml>            # Validate menu configuration file
-nwizard --config-options <install.toml>  # Export config as NWIZ_* env variables
+nwiz --lint <menu.toml>            # Validate menu configuration file
+nwiz --config-options <install.toml>  # Export config as NWIZ_* env variables
 ```
 
 ### Navigation
@@ -195,7 +195,7 @@ type = "action"
 name = "Delete Old Backups"
 description = "Remove backups older than 30 days"
 command = "./scripts/cleanup-backups.sh --days=30"
-disclaimer = "/etc/nwizard/data-deletion-disclaimer.txt"
+disclaimer = "/etc/nwiz/data-deletion-disclaimer.txt"
 ```
 
 The `disclaimer` parameter behavior:
@@ -273,7 +273,7 @@ type = "action"
 name = "Backup System"
 description = "Create system backup"
 command = "rsync -av /home /backup/"
-nwizard_status_prefix = "Creating backup"
+nwiz_status_prefix = "Creating backup"
 ```
 
 ##### Shell Configuration
@@ -308,11 +308,11 @@ The ASCII art appears above the menu items and adds visual branding to your inte
 
 ## Theming System
 
-nwizard includes a comprehensive theming system that allows you to customize the appearance of your menus and interface. You can use built-in themes or create completely custom themes.
+nwiz includes a comprehensive theming system that allows you to customize the appearance of your menus and interface. You can use built-in themes or create completely custom themes.
 
 ### Built-in Themes
 
-nwizard comes with several built-in themes that you can use immediately. The default theme is **nocturne** (a purple gradient theme). Available themes are:
+nwiz comes with several built-in themes that you can use immediately. The default theme is **nocturne** (a purple gradient theme). Available themes are:
 
 - **nocturne**: Default purple theme matching the Nocturne desktop environment branding
 - **forest**: Green gradient theme inspired by nature
@@ -326,20 +326,20 @@ nwizard comes with several built-in themes that you can use immediately. The def
 You can view all available themes with their color previews:
 
 ```bash
-nwizard --show-themes
+nwiz --show-themes
 ```
 
 You can specify a built-in theme using the command line:
 
 ```bash
-nwizard --theme nocturne
-nwizard --theme forest
-nwizard --theme water
-nwizard --theme nature
-nwizard --theme fire
-nwizard --theme rainbow
-nwizard --theme greyscale
-nwizard --theme high_contrast
+nwiz --theme nocturne
+nwiz --theme forest
+nwiz --theme water
+nwiz --theme nature
+nwiz --theme fire
+nwiz --theme rainbow
+nwiz --theme greyscale
+nwiz --theme high_contrast
 ```
 
 ### Custom Themes
@@ -404,13 +404,13 @@ You can use your custom theme in several ways:
 
 ```bash
 # Use a theme file by path
-nwizard --theme /path/to/theme.toml
+nwiz --theme /path/to/theme.toml
 
 # Place theme.toml in the default config directory
-# ~/.config/nwizard/theme.toml (will be loaded automatically)
+# ~/.config/nwiz/theme.toml (will be loaded automatically)
 
 # Use with custom config
-nwizard --config /path/to/menu.toml --theme /path/to/custom-theme.toml
+nwiz --config /path/to/menu.toml --theme /path/to/custom-theme.toml
 ```
 
 #### Theme Configuration Example
@@ -466,27 +466,27 @@ You can export any built-in theme to a TOML file for customization using the `--
 
 ```bash
 # Export default theme (nocturne)
-nwizard --write-theme my-theme.toml
+nwiz --write-theme my-theme.toml
 
 # Export specific built-in theme
-nwizard -t rainbow --write-theme rainbow-custom.toml
-nwizard -t greyscale --write-theme grey-theme.toml
-nwizard -t high_contrast --write-theme accessible-theme.toml
+nwiz -t rainbow --write-theme rainbow-custom.toml
+nwiz -t greyscale --write-theme grey-theme.toml
+nwiz -t high_contrast --write-theme accessible-theme.toml
 ```
 
 This creates a complete theme.toml file that you can:
 1. **Modify**: Edit the colors to create your custom theme
-2. **Use**: Load with `nwizard --theme my-theme.toml`
+2. **Use**: Load with `nwiz --theme my-theme.toml`
 3. **Share**: Distribute to others for consistent theming
 
 The exported file contains all gradient colors, base colors, and UI element colors with proper hex values.
 
 ### Default Theme Location
 
-If no theme is specified, nwizard will look for themes in this order:
+If no theme is specified, nwiz will look for themes in this order:
 
 1. Theme specified via `--theme` command line option
-2. `~/.config/nwizard/theme.toml` (custom theme in config directory)
+2. `~/.config/nwiz/theme.toml` (custom theme in config directory)
 3. Built-in "nocturne" theme (default)
 
 ## Using the Menu Linter
@@ -494,7 +494,7 @@ If no theme is specified, nwizard will look for themes in this order:
 The built-in linter helps validate your menu configuration files before using them. Run the linter with:
 
 ```bash
-nwizard --lint menu.toml
+nwiz --lint menu.toml
 ```
 
 The linter checks for:
@@ -517,13 +517,13 @@ Validation completed with 1 error(s) and 1 warning(s)
 
 ## Working with install.toml
 
-The install.toml file is automatically created by nwizard to persist user selections from selector and multiple_selection menu items. This file acts as a configuration database that remembers user choices across sessions and makes them available to menu commands.
+The install.toml file is automatically created by nwiz to persist user selections from selector and multiple_selection menu items. This file acts as a configuration database that remembers user choices across sessions and makes them available to menu commands.
 
 ### File Location and Creation
 
-When nwizard starts, it automatically creates install.toml if it doesn't exist. The default location is the same directory as your menu.toml file:
+When nwiz starts, it automatically creates install.toml if it doesn't exist. The default location is the same directory as your menu.toml file:
 
-- If using default config: `~/.config/nwizard/install.toml`
+- If using default config: `~/.config/nwiz/install.toml`
 - If using `--config /path/to/menu.toml`: install.toml is created in `/path/to/`
 - If using `--install-config-dir /custom/path`: install.toml is created in `/custom/path/`
 
@@ -535,7 +535,7 @@ The file is created with default values from your menu configuration. All select
 
 ### How install.toml Works
 
-When you define a selector or multiple_selection item in your menu with an `install_key`, nwizard automatically:
+When you define a selector or multiple_selection item in your menu with an `install_key`, nwiz automatically:
 
 1. Creates an entry in install.toml when the file is first generated
 2. Updates the entry whenever the user makes a selection
@@ -596,7 +596,7 @@ You can export install.toml values as environment variables for use in shell scr
 
 ```bash
 # Export all values from install.toml as NWIZ_* variables
-eval $(nwizard --config-options ~/.config/nwizard/install.toml)
+eval $(nwiz --config-options ~/.config/nwiz/install.toml)
 
 # Now you can use them in your script
 echo $NWIZ_LOG_LEVEL     # Outputs: debug
@@ -623,11 +623,11 @@ You can manually edit install.toml if needed, but be aware that:
 2. Keys should be lowercase
 3. Single values should be strings: `key = "value"`
 4. Multiple values should be arrays: `key = ["value1", "value2"]`
-5. Changes take effect the next time nwizard starts
+5. Changes take effect the next time nwiz starts
 
 ### Validation and Recovery
 
-If install.toml becomes corrupted or doesn't match the current menu structure, nwizard will automatically:
+If install.toml becomes corrupted or doesn't match the current menu structure, nwiz will automatically:
 
 1. Detect the mismatch when starting
 2. Backup and delete the invalid file
@@ -714,7 +714,7 @@ type = "action"
 name = "Update System"
 description = "Update all packages"
 command = "sudo apt update && sudo apt upgrade -y"
-nwizard_status_prefix = "Updating system"
+nwiz_status_prefix = "Updating system"
 
 [menu.maintenance.clean]
 type = "action"
@@ -890,16 +890,16 @@ type = "action"
 name = "Deploy Selected Services"
 description = "Deploy services to target environment"
 command = "deploy.sh --env=${DEPLOY_ENV} --services='${SERVICES}'"
-nwizard_status_prefix = "Deploying to"
+nwiz_status_prefix = "Deploying to"
 ```
 
 **Usage**:
 ```bash
 # Run with the custom theme
-nwizard --config corporate-menu.toml --theme theme.toml
+nwiz --config corporate-menu.toml --theme theme.toml
 
-# Or place both files in ~/.config/nwizard/ and run
-nwizard
+# Or place both files in ~/.config/nwiz/ and run
+nwiz
 ```
 
 This example demonstrates how themes, ASCII art, configuration persistence, and variable substitution work together to create a professional, branded interface for system administration tasks.
@@ -913,30 +913,30 @@ If the application fails to start with a terminal access error, ensure you're ru
 If menus don't load correctly, validate your menu.toml file using the linter:
 
 ```bash
-nwizard --lint menu.toml
+nwiz --lint menu.toml
 ```
 
-If commands fail with permission errors, ensure you either run nwizard with appropriate permissions or use sudo within your commands.
+If commands fail with permission errors, ensure you either run nwiz with appropriate permissions or use sudo within your commands.
 
 ### Configuration File Locations
 
 Default configuration locations:
 
-- Menu configuration: `~/.config/nwizard/menu.toml`
-- Install selections: `~/.config/nwizard/install.toml`
-- Theme configuration: `~/.config/nwizard/theme.toml`
+- Menu configuration: `~/.config/nwiz/menu.toml`
+- Install selections: `~/.config/nwiz/install.toml`
+- Theme configuration: `~/.config/nwiz/theme.toml`
 
 You can override these with command-line options.
 
 ### Debug Mode
 
-For troubleshooting, you can see more detailed output by checking the console where you launched nwizard. Error messages and command outputs are displayed there.
+For troubleshooting, you can see more detailed output by checking the console where you launched nwiz. Error messages and command outputs are displayed there.
 
 ## Best Practices
 
 When creating menus, organize related items into submenus for better navigation. Use descriptive names and helpful descriptions for all menu items.
 
-For commands that take a long time, provide feedback using the nwizard_status_prefix option. This helps users understand what's happening.
+For commands that take a long time, provide feedback using the nwiz_status_prefix option. This helps users understand what's happening.
 
 Always test your menu configurations with the linter before deployment. This catches errors early and ensures a smooth user experience.
 

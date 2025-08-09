@@ -173,6 +173,7 @@ fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem, a
                 // Check if the file exists
                 const file = std.fs.cwd().openFile(resolved_path, .{}) catch |err| {
                     const msg = try std.fmt.allocPrint(allocator, "Disclaimer file not found: '{}' (resolved to '{s}')", .{ err, resolved_path });
+                    defer allocator.free(msg);
                     try validation.addError(item.id, msg);
                     return;
                 };

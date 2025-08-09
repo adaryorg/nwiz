@@ -36,7 +36,7 @@ pub fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_f
         };
         defer allocator.free(home_dir);
         
-        config_dir_allocated = try std.fmt.allocPrint(allocator, "{s}/.config/nwizard", .{home_dir});
+        config_dir_allocated = try std.fmt.allocPrint(allocator, "{s}/.config/nwiz", .{home_dir});
         
         std.fs.cwd().makePath(config_dir_allocated) catch |err| {
             switch (err) {

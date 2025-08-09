@@ -26,7 +26,7 @@ pub fn printVersion() void {
 
 pub fn printHelp() void {
     std.debug.print("USAGE:\n", .{});
-    std.debug.print("  nwizard [OPTIONS]\n\n", .{});
+    std.debug.print("  nwiz [OPTIONS]\n\n", .{});
     
     std.debug.print("GENERAL OPTIONS:\n", .{});
     std.debug.print("  -h, --help                         Show this help message\n", .{});
@@ -60,9 +60,9 @@ pub fn listThemes() void {
         std.debug.print("  {s}\n", .{theme_name});
     }
     
-    std.debug.print("\nUsage: nwizard --theme <name>\n", .{});
-    std.debug.print("       nwizard --show-theme <name>  (see detailed preview)\n", .{});
-    std.debug.print("       nwizard --show-themes        (see all detailed previews)\n\n", .{});
+    std.debug.print("\nUsage: nwiz --theme <name>\n", .{});
+    std.debug.print("       nwiz --show-theme <name>  (see detailed preview)\n", .{});
+    std.debug.print("       nwiz --show-themes        (see all detailed previews)\n\n", .{});
 }
 
 pub fn showTheme(theme_name: []const u8) void {
@@ -103,7 +103,7 @@ pub fn showTheme(theme_name: []const u8) void {
         theme_instance.border.b,
     });
     
-    std.debug.print("\n  Usage: nwizard --theme {s}\n\n", .{theme_name});
+    std.debug.print("\n  Usage: nwiz --theme {s}\n\n", .{theme_name});
 }
 
 pub fn showThemes() void {
@@ -143,12 +143,12 @@ pub fn showThemes() void {
             theme_instance.border.b,
         });
         
-        std.debug.print("\n  Usage: nwizard --theme {s}\n", .{theme_name});
+        std.debug.print("\n  Usage: nwiz --theme {s}\n", .{theme_name});
         std.debug.print("  ────────────────────────────────────\n\n", .{});
     }
     
     std.debug.print("You can also use custom theme files:\n", .{});
-    std.debug.print("  nwizard --theme /path/to/custom-theme.toml\n\n", .{});
+    std.debug.print("  nwiz --theme /path/to/custom-theme.toml\n\n", .{});
 }
 
 pub fn writeTheme(allocator: std.mem.Allocator, theme_spec: ?[]const u8, output_path: []const u8) void {

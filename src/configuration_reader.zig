@@ -11,7 +11,7 @@ pub fn readConfigurationOptions(allocator: std.mem.Allocator, install_toml_path:
         switch (err) {
             error.FileNotFound => {
                 std.debug.print("# Error: Install configuration file not found: {s}\n", .{install_toml_path});
-                std.debug.print("# Please ensure the file exists or run nwizard normally to create it.\n", .{});
+                std.debug.print("# Please ensure the file exists or run nwiz normally to create it.\n", .{});
                 return;
             },
             else => {
@@ -77,7 +77,7 @@ pub fn readConfigurationOptions(allocator: std.mem.Allocator, install_toml_path:
         }
         
         // Print export statement to stdout so eval $() can capture it
-        // The calling process needs to eval the output: eval $(nwizard --read-configuration-options path)
+        // The calling process needs to eval the output: eval $(nwiz --read-configuration-options path)
         const stdout = std.io.getStdOut().writer();
         try stdout.print("export {s}=\"{s}\"\n", .{ env_var_name, env_var_value });
         

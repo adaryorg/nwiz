@@ -295,8 +295,8 @@ pub fn loadMenuConfig(allocator: std.mem.Allocator, file_path: []const u8) !menu
         }
         
         item_parser.reset();
-        if (item_parser.findKey("nwizard_status")) |_| {
-            menu_item.nwizard_status_prefix = item_parser.parseString() catch null;
+        if (item_parser.findKey("nwiz_status")) |_| {
+            menu_item.nwiz_status_prefix = item_parser.parseString() catch null;
         }
         
         // Parse install_key for all types (validation will check if it's appropriate)
