@@ -73,7 +73,7 @@ jobs:
         body: |
           ## nwiz TUI ${{ steps.version.outputs.version }}
           
-          Cross-platform binaries for the Nocturne desktop environment management tool.
+          Cross-platform binaries for nwiz.
           
           ### Downloads
           

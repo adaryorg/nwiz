@@ -1,6 +1,6 @@
-# Git Workflow for Nocturne TUI
+# Git Workflow for nwiz
 
-This document describes the branching strategy and release process for the Nocturne TUI project.
+This document describes the branching strategy and release process for the nwiz project.
 
 ## Branch Structure
 

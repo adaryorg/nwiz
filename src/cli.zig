@@ -19,7 +19,7 @@ pub const AppConfig = struct {
 };
 
 pub fn printVersion() void {
-    std.debug.print("Nocturne TUI {s}\n", .{build_options.tag});
+    std.debug.print("nwiz {s}\n", .{build_options.tag});
     std.debug.print("Commit: {s}\n", .{build_options.commit_hash});
     std.debug.print("Built: {s}\n", .{build_options.build_time});
 }

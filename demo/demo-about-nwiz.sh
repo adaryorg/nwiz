@@ -1,0 +1,18 @@
+#!/bin/bash
+echo "=== nwiz Demo Menu ==="
+echo "Version: 1.0.0"
+echo "Purpose: Comprehensive demonstration of nwiz capabilities"
+echo ""
+echo "This menu showcases:"
+echo "- Basic command execution with status messages"
+echo "- Selection menus (single and multiple choice)"
+echo "- Nested menu structures and navigation"
+echo "- Status message handling with custom prefixes"
+echo "- Real-world integration examples and workflows"
+echo "- Configuration persistence using install.toml"
+echo "- Shell script best practices for menu actions"
+echo ""
+echo "All commands are safe demo scripts that simulate real operations."
+echo "This demonstrates the recommended approach of using shell scripts"
+echo "instead of direct commands in menu actions."
+sleep 1
