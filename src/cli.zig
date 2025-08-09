@@ -16,6 +16,7 @@ pub const AppConfig = struct {
     write_theme_path: ?[]const u8 = null,
     show_theme_name: ?[]const u8 = null,
     list_themes: bool = false,
+    log_file_path: ?[]const u8 = null,
 };
 
 pub fn printVersion() void {
@@ -47,6 +48,7 @@ pub fn printHelp() void {
     std.debug.print("      --show-themes                  Show all built-in themes with preview\n", .{});
     std.debug.print("      --write-theme <PATH>           Export theme to TOML file and exit\n", .{});
     std.debug.print("      --config-options <PATH>        Export install.toml as NWIZ_* variables\n", .{});
+    std.debug.print("      --log-file <PATH>              Specify log file path (default: nwiz-log.txt)\n", .{});
     std.debug.print("\n", .{});
 }
 
@@ -263,6 +265,14 @@ pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
             }
             app_config.write_theme_path = try allocator.dupe(u8, args[i]);
             app_config.use_sudo = false;
+        } else if (std.mem.eql(u8, arg, "--log-file")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --log-file requires a file path\n", .{});
+                app_config.should_continue = false;
+                return app_config;
+            }
+            app_config.log_file_path = try allocator.dupe(u8, args[i]);
         } else {
             std.debug.print("Error: Unknown argument '{s}'\n", .{arg});
             std.debug.print("Use --help for usage information\n", .{});
@@ -295,5 +305,8 @@ pub fn deinitAppConfig(allocator: std.mem.Allocator, app_config: *const AppConfi
     }
     if (app_config.show_theme_name) |show_theme_name| {
         allocator.free(show_theme_name);
+    }
+    if (app_config.log_file_path) |log_file_path| {
+        allocator.free(log_file_path);
     }
 }

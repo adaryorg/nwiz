@@ -77,6 +77,16 @@ fn parseMenuConfigFromTable(allocator: std.mem.Allocator, table: *const toml.Tab
                     config.shell = try memory.dupeString(allocator, "bash");
                 }
                 
+                // Parse logfile
+                if (menu_table.get("logfile")) |logfile_val| {
+                    switch (logfile_val) {
+                        .string => |logfile_str| config.logfile = try memory.dupeString(allocator, logfile_str),
+                        else => config.logfile = null,
+                    }
+                } else {
+                    config.logfile = null;
+                }
+                
                 // Parse ASCII art array
                 if (menu_table.get("ascii_art")) |art_val| {
                     switch (art_val) {
@@ -144,6 +154,7 @@ fn parseMenuItemsRecursive(allocator: std.mem.Allocator, config: *menu.MenuConfi
         if (prefix.len == 0 and (std.mem.eql(u8, key, "title") or 
             std.mem.eql(u8, key, "description") or 
             std.mem.eql(u8, key, "shell") or 
+            std.mem.eql(u8, key, "logfile") or
             std.mem.eql(u8, key, "ascii_art") or
             std.mem.eql(u8, key, "nwiz_status_prefix"))) {
             continue;
