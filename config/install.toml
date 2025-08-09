@@ -1,7 +1,0 @@
-# Nocturne Installation Configuration
-# This file stores selection values from multiple selection and selector menu items
-
-browser = "firefox"
-theme = "nocturne"
-packages = []
-editor = "vim"

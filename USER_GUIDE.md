@@ -1,12 +1,12 @@
-# Nocturne TUI User Guide
+# nwiz User Guide
 
 ## Introduction
 
-Nocturne TUI (nwiz) is a terminal user interface application for managing system configurations, installations, and maintenance tasks through a menu-driven interface. This guide explains how to use the application, create custom menus, and integrate it with your scripts and workflows.
+nwiz is a terminal user interface application for managing system configurations, installations, and maintenance tasks through a menu-driven interface. This guide explains how to use the application, create custom menus, and integrate it with your scripts and workflows.
 
 ## Building and Installation
 
-To build Nocturne TUI from source, you need Zig compiler version 0.13.0 or later. Run the following command in the project directory:
+To build nwiz from source, you need Zig compiler version 0.13.0 or later. Run the following command in the project directory:
 
 ```bash
 zig build
@@ -154,7 +154,47 @@ There are three main types of menu items:
 type = "action"
 name = "System Update"
 description = "Update system packages"
-command = "sudo apt update && sudo apt upgrade"
+command = "./scripts/system-update.sh"
+```
+
+**Best Practice: Use Shell Scripts Instead of Direct Commands**
+
+While nwiz supports running any system command directly in the `command` field, **shell scripts are strongly recommended** for better maintainability and functionality:
+
+```toml
+# RECOMMENDED: Use shell scripts
+[menu.system_info]
+type = "action"
+name = "System Information"
+description = "Display system details"
+command = "./scripts/system-info.sh"
+
+# DISCOURAGED: Direct commands (though they work)
+[menu.system_info_direct]
+type = "action"  
+name = "System Information"
+description = "Display system details"
+command = "echo '=== CPU ==='; top -bn1 | head -5; echo '=== Memory ==='; free -h"
+```
+
+**Benefits of using shell scripts:**
+- **Variable Access**: Scripts can load configuration using `eval $(nwiz --config-options config/install.toml)` to access user selections
+- **Better Error Handling**: Proper exit codes and error handling
+- **Maintainability**: Easier to modify and debug complex operations
+- **Reusability**: Scripts can be called from multiple menu items
+- **Status Messages**: Better integration with status message system
+- **Complex Logic**: Support for loops, conditionals, and advanced shell features
+
+**Example script with configuration loading:**
+```bash
+#!/bin/bash
+# Load user selections from install.toml
+eval $(nwiz --config-options config/install.toml)
+
+echo "[SETUP] Configuring ${NWIZ_THEME:-default} theme"
+# Use the loaded variables in your script (note NWIZ_ prefix)
+echo "Selected editor: ${NWIZ_EDITOR_TYPE:-vim}"
+echo "Selected shell: ${NWIZ_SHELL_TYPE:-bash}"
 ```
 
 Actions support optional parameters to control their behavior:
@@ -750,13 +790,13 @@ description = "Monitor system resources"
 type = "action"
 name = "Resource Usage"
 description = "Show CPU, memory, and disk usage"
-command = "echo '=== CPU ==='; top -bn1 | head -20; echo '=== Memory ==='; free -h; echo '=== Disk ==='; df -h"
+command = "./scripts/system-resources.sh"
 
 [menu.monitoring.services]
 type = "action"
 name = "Service Status"
 description = "Check critical services"
-command = "systemctl status nginx postgresql redis"
+command = "./scripts/check-services.sh"
 ```
 
 ### Development Environment Setup
@@ -948,4 +988,4 @@ Remember that all commands run in a non-interactive shell by default. If you nee
 
 ## Conclusion
 
-Nocturne TUI provides a powerful framework for creating interactive terminal menus. By combining menu configurations with the install.toml persistence system, you can create sophisticated installation wizards, system management tools, and configuration interfaces that remember user preferences across sessions.
+nwiz provides a powerful framework for creating interactive terminal menus. By combining menu configurations with the install.toml persistence system, you can create sophisticated installation wizards, system management tools, and configuration interfaces that remember user preferences across sessions.

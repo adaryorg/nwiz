@@ -1,0 +1,298 @@
+# nwiz Demo Menu Configuration
+# This file showcases all capabilities of the nwiz menu system
+
+[menu]
+title = "nwiz Demo Menu"
+description = "Comprehensive demonstration of nwiz TUI capabilities"
+shell = "bash"
+nwiz_status_prefix = "[NWIZ_STATUS]"
+
+# ASCII Art Header (shows branding capabilities)
+ascii_art = [
+    "███    ██ ██     ██ ██ ███████",
+    "████   ██ ██     ██ ██    ███ ",
+    "██ ██  ██ ██  █  ██ ██   ███  ",
+    "██  ██ ██ ██ ███ ██ ██  ███   ",
+    "██   ████  ███ ███  ██ ███████"
+]
+
+# =============================================================================
+# 1. BASIC ACTIONS - Simple command execution
+# =============================================================================
+
+[menu.basic]
+type = "submenu"
+name = "Basic Actions"
+description = "Simple command demonstrations"
+
+[menu.basic.quick]
+type = "action"
+name = "Quick Action"
+description = "Fast command with status updates"
+command = "./demo/demo-quick-action.sh"
+nwiz_status = "[QUICK]"
+
+[menu.basic.long]
+type = "action"
+name = "Long Process"
+description = "Extended operation with detailed progress"
+command = "./demo/demo-long-process.sh"
+nwiz_status = "[PROCESS]"
+
+[menu.basic.system]
+type = "action"
+name = "System Information"
+description = "Display system details and resources"
+command = "./demo/demo-system-info.sh"
+nwiz_status = "[SYSTEM]"
+
+[menu.basic.failure]
+type = "action"
+name = "Simulated Failure"
+description = "Demonstrates error handling and failed status"
+command = "./demo/demo-simulate-failure.sh"
+nwiz_status = "[FAILURE]"
+
+# =============================================================================
+# 2. SELECTION CAPABILITIES - Single and multiple choice
+# =============================================================================
+
+[menu.selection]
+type = "submenu"
+name = "Selection Features"
+description = "Single and multiple choice demonstrations"
+
+[menu.selection.theme]
+type = "selector"
+name = "Choose Theme"
+description = "Select a theme for demonstration"
+options = ["dark", "light", "blue", "green", "purple"]
+default = "dark"
+install_key = "THEME"
+
+[menu.selection.apply_theme]
+type = "action"
+name = "Apply Selected Theme"
+description = "Apply the theme you selected above"
+command = "./demo/demo-config-theme.sh"
+nwiz_status = "[THEME]"
+
+[menu.selection.packages]
+type = "multiple_selection"
+name = "Select Development Tools"
+description = "Choose multiple tools to install"
+options = [
+    "git:Version control system",
+    "vim:Text editor",
+    "nodejs:JavaScript runtime",
+    "python:Programming language",
+    "docker:Container platform",
+    "curl:HTTP client tool"
+]
+install_key = "DEV_TOOLS"
+
+[menu.selection.install_tools]
+type = "action"
+name = "Install Selected Tools"
+description = "Install the development tools you selected"
+command = "./demo/demo-install-tools.sh"
+nwiz_status = "[INSTALL]"
+
+# =============================================================================
+# 3. ADVANCED FEATURES - Complex configurations and nested menus
+# =============================================================================
+
+[menu.advanced]
+type = "submenu"
+name = "Advanced Features"
+description = "Complex menu structures and configurations"
+
+[menu.advanced.environment]
+type = "submenu"
+name = "Environment Setup"
+description = "Multi-step environment configuration"
+
+[menu.advanced.environment.select_shell]
+type = "selector"
+name = "Choose Shell"
+description = "Select your preferred shell"
+options = ["bash:Bourne Again Shell", "zsh:Z Shell", "fish:Friendly Interactive Shell"]
+default = "bash"
+install_key = "SHELL_TYPE"
+
+[menu.advanced.environment.select_editor]
+type = "selector"
+name = "Choose Editor"
+description = "Select your preferred text editor"
+options = ["vim:Vi Improved", "nano:Simple editor", "emacs:GNU Emacs"]
+default = "vim"
+install_key = "EDITOR_TYPE"
+
+[menu.advanced.environment.configure]
+type = "action"
+name = "Apply Environment Settings"
+description = "Configure your selected shell and editor"
+command = "./demo/demo-configure-environment.sh"
+nwiz_status = "[ENV]"
+
+[menu.advanced.networking]
+type = "submenu"
+name = "Network Tools"
+description = "Network diagnostics and tools"
+
+[menu.advanced.networking.ping]
+type = "action"
+name = "Network Connectivity Test"
+description = "Test network connectivity"
+command = "./demo/demo-network-test.sh"
+nwiz_status = "[NETWORK]"
+
+[menu.advanced.networking.ports]
+type = "action"
+name = "Port Scanner"
+description = "Scan common ports on localhost"
+command = "./demo/demo-port-scanner.sh"
+nwiz_status = "[SCANNER]"
+
+# =============================================================================
+# 4. STATUS AND OUTPUT DEMOS - Different output handling
+# =============================================================================
+
+[menu.output]
+type = "submenu"
+name = "Output Demonstrations"
+description = "Different ways to handle command output"
+
+[menu.output.with_status]
+type = "action"
+name = "Command with Status Messages"
+description = "Shows status line updates during execution"
+command = "./demo/demo-long-process.sh"
+nwiz_status = "[PROCESS]"
+
+[menu.output.no_status]
+type = "action"
+name = "Traditional Command Output"
+description = "Standard command without status messages"
+command = "./demo/demo-traditional-output.sh"
+
+[menu.output.mixed]
+type = "action"
+name = "Mixed Output"
+description = "Combination of status and regular output"
+command = "./demo/demo-mixed-output.sh"
+nwiz_status = "[MIXED]"
+
+[menu.output.verbose]
+type = "action"
+name = "Verbose Output"
+description = "Command with lots of output to test scrolling"
+command = "./demo/demo-verbose-output.sh"
+nwiz_status = "[VERBOSE]"
+
+[menu.output.with_disclaimer]
+type = "action"
+name = "Command with Disclaimer"
+description = "Shows disclaimer dialog before execution"
+command = "./demo/demo-disclaimer-command.sh"
+disclaimer = "config/simple-disclaimer.txt"
+nwiz_status = "[DISCLAIMER]"
+
+# =============================================================================
+# 5. INTEGRATION EXAMPLES - Real-world usage patterns
+# =============================================================================
+
+[menu.integration]
+type = "submenu"
+name = "Integration Examples"
+description = "Real-world usage patterns and workflows"
+
+[menu.integration.project_setup]
+type = "submenu"
+name = "Project Setup Wizard"
+description = "Complete project initialization workflow"
+
+[menu.integration.project_setup.language]
+type = "selector"
+name = "Choose Language"
+description = "Select your project's main language"
+options = ["javascript:Node.js project", "python:Python project", "rust:Rust project", "go:Go project"]
+default = "javascript"
+install_key = "PROJECT_LANG"
+
+[menu.integration.project_setup.features]
+type = "multiple_selection"
+name = "Project Features"
+description = "Select additional features for your project"
+options = [
+    "testing:Unit testing framework",
+    "linting:Code linting tools",
+    "docker:Docker containerization",
+    "ci:Continuous integration",
+    "docs:Documentation generation"
+]
+install_key = "PROJECT_FEATURES"
+
+[menu.integration.project_setup.create]
+type = "action"
+name = "Create Project"
+description = "Initialize project with selected options"
+command = "./demo/demo-create-project.sh"
+nwiz_status = "[PROJECT]"
+
+[menu.integration.maintenance]
+type = "submenu"
+name = "System Maintenance"
+description = "System maintenance and cleanup tasks"
+
+[menu.integration.maintenance.cleanup]
+type = "action"
+name = "System Cleanup"
+description = "Clean temporary files and caches"
+command = "./demo/demo-system-cleanup.sh"
+nwiz_status = "[CLEANUP]"
+
+[menu.integration.maintenance.updates]
+type = "action"
+name = "Check Updates"
+description = "Check for available system updates"
+command = "./demo/demo-check-updates.sh"
+nwiz_status = "[UPDATES]"
+
+# =============================================================================
+# 6. HELP AND INFORMATION
+# =============================================================================
+
+[menu.help]
+type = "submenu"
+name = "Help & Information"
+description = "Documentation and help resources"
+
+[menu.help.about]
+type = "action"
+name = "About nwiz"
+description = "Information about this demo menu"
+command = "./demo/demo-about-nwiz.sh"
+show_output = true
+
+[menu.help.features]
+type = "action"
+name = "Feature Overview"
+description = "Overview of demonstrated features"
+command = "./demo/demo-feature-overview.sh"
+show_output = true
+
+[menu.help.commands]
+type = "action"
+name = "Command Reference"
+description = "Quick reference for menu navigation"
+command = "./demo/demo-command-reference.sh"
+show_output = true
+
+[menu.help.configuration]
+type = "action"
+name = "Configuration Demo"
+description = "Demonstrates persistent configuration using install.toml"
+command = "./demo/demo-install-options.sh"
+show_output = true
+nwiz_status = "[CONFIG]"
