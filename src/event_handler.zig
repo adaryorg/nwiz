@@ -11,6 +11,7 @@ const sudo = @import("sudo.zig");
 const theme = @import("theme.zig");
 const tty_compat = @import("tty_compat.zig");
 const disclaimer = @import("disclaimer.zig");
+const memory = @import("utils/memory.zig");
 
 pub const EventResult = enum {
     continue_running,
@@ -61,7 +62,6 @@ fn handleCtrlC(context: *EventContext) !EventResult {
         _ = std.posix.kill(shell_pid, std.posix.SIG.KILL) catch {};
         context.global_shell_pid.* = null;
         
-        // Also tell the async executor to stop immediately
         if (context.global_async_executor.*) |async_exec| {
             async_exec.killCommand();
         }
@@ -185,7 +185,7 @@ fn handleMenuEnterKey(context: *EventContext) !EventResult {
         // Check if action has a disclaimer
         if (current_item.disclaimer) |disclaimer_path| {
             // Use disclaimer path as-is (relative paths are relative to current working directory)
-            const resolved_disclaimer_path = try context.allocator.dupe(u8, disclaimer_path);
+            const resolved_disclaimer_path = try memory.dupeString(context.allocator, disclaimer_path);
             defer context.allocator.free(resolved_disclaimer_path);
             
             // Show disclaimer dialog
@@ -199,8 +199,7 @@ fn handleMenuEnterKey(context: *EventContext) !EventResult {
             try startActionCommand(context, command, current_item);
         }
     } else {
-        const entered = context.menu_state.enterSubmenu() catch false;
-        _ = entered;
+        _ = context.menu_state.enterSubmenu() catch false;
     }
     
     return EventResult.continue_running;
@@ -214,8 +213,7 @@ fn handleMenuRightArrowKey(context: *EventContext) !void {
         } else if (current_item.type == .multiple_selection) {
             _ = context.menu_state.enterMultipleSelectionMode();
         } else {
-            const entered = context.menu_state.enterSubmenu() catch false;
-            _ = entered;
+            _ = context.menu_state.enterSubmenu() catch false;
         }
     }
 }
@@ -299,8 +297,8 @@ fn handleExitConfirmationKeyPress(key: vaxis.Key, context: *EventContext) !Event
 }
 
 fn startActionCommand(context: *EventContext, command: []const u8, current_item: *const menu.MenuItem) !void {
-    const command_copy = try context.allocator.dupe(u8, command);
-    const menu_item_name_copy = try context.allocator.dupe(u8, current_item.name);
+    const command_copy = try memory.dupeString(context.allocator, command);
+    const menu_item_name_copy = try memory.dupeString(context.allocator, current_item.name);
     context.async_command_executor.startCommand(command) catch |err| {
         context.allocator.free(command_copy);
         context.allocator.free(menu_item_name_copy);

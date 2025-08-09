@@ -1,4 +1,4 @@
-.PHONY: build clean
+.PHONY: build clean test
 
 build:
 	zig build -Dtarget=x86_64-linux-gnu -Doptimize=ReleaseSafe
@@ -11,3 +11,6 @@ build:
 
 clean:
 	rm -f zig-out/bin/nwiz*
+
+test:
+	zig build test

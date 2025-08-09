@@ -1,9 +1,10 @@
 # Nocturne Installation Configuration
 # This file stores selection values from multiple selection and selector menu items
 
+[install]
 theme = "dark"
-dev_tools = ["git", "nodejs", "curl"]
-editor_type = "nano"
-shell_type = "zsh"
-project_lang = "python"
-project_features = ["testing", "linting", "docker", "ci", "docs"]
+dev_tools = ["vim", "nodejs", "python"]
+editor_type = "vim"
+shell_type = "bash"
+project_lang = "javascript"
+project_features = []

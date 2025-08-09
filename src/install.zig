@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 const std = @import("std");
+const memory = @import("utils/memory.zig");
+const string_utils = @import("utils/string.zig");
+const install_toml = @import("install_toml.zig");
 
 pub const InstallConfig = struct {
     selections: std.HashMap([]const u8, SelectionValue, std.hash_map.StringContext, std.hash_map.default_max_load_percentage),
@@ -43,8 +46,8 @@ pub const InstallConfig = struct {
     }
 
     pub fn setSingleSelection(self: *Self, key: []const u8, value: []const u8) !void {
-        const key_copy = try self.allocator.dupe(u8, key);
-        const value_copy = try self.allocator.dupe(u8, value);
+        const key_copy = try memory.dupeString(self.allocator, key);
+        const value_copy = try memory.dupeString(self.allocator, value);
         
         const result = try self.selections.getOrPut(key_copy);
         if (result.found_existing) {
@@ -56,10 +59,10 @@ pub const InstallConfig = struct {
     }
 
     pub fn setMultipleSelection(self: *Self, key: []const u8, values: [][]const u8) !void {
-        const key_copy = try self.allocator.dupe(u8, key);
+        const key_copy = try memory.dupeString(self.allocator, key);
         var values_copy = try self.allocator.alloc([]const u8, values.len);
         for (values, 0..) |value, i| {
-            values_copy[i] = try self.allocator.dupe(u8, value);
+            values_copy[i] = try memory.dupeString(self.allocator, value);
         }
         
         const result = try self.selections.getOrPut(key_copy);
@@ -72,162 +75,11 @@ pub const InstallConfig = struct {
     }
 };
 
-pub const InstallTomlParser = struct {
-    content: []const u8,
-    pos: usize = 0,
-    allocator: std.mem.Allocator,
+// Use the new TOML-based loader
+pub const loadInstallConfig = install_toml.loadInstallConfigFromToml;
+pub const saveInstallConfig = install_toml.saveInstallConfigToToml;
 
-    const Self = @This();
-
-    pub fn init(allocator: std.mem.Allocator, content: []const u8) Self {
-        return Self{
-            .content = content,
-            .allocator = allocator,
-        };
-    }
-
-    fn skipWhitespace(self: *Self) void {
-        while (self.pos < self.content.len) {
-            const ch = self.content[self.pos];
-            if (ch == ' ' or ch == '\t' or ch == '\n' or ch == '\r') {
-                self.pos += 1;
-            } else if (ch == '#') {
-                while (self.pos < self.content.len and self.content[self.pos] != '\n') {
-                    self.pos += 1;
-                }
-            } else {
-                break;
-            }
-        }
-    }
-
-    fn parseString(self: *Self) ![]const u8 {
-        self.skipWhitespace();
-        if (self.pos >= self.content.len or self.content[self.pos] != '"') {
-            return error.InvalidFormat;
-        }
-        self.pos += 1;
-
-        const start = self.pos;
-        while (self.pos < self.content.len and self.content[self.pos] != '"') {
-            self.pos += 1;
-        }
-        if (self.pos >= self.content.len) {
-            return error.InvalidFormat;
-        }
-
-        const result = self.content[start..self.pos];
-        self.pos += 1;
-        return result;
-    }
-
-    fn parseArray(self: *Self) ![][]const u8 {
-        self.skipWhitespace();
-        if (self.pos >= self.content.len or self.content[self.pos] != '[') {
-            return error.InvalidFormat;
-        }
-        self.pos += 1;
-
-        var items = std.ArrayList([]const u8).init(self.allocator);
-        defer items.deinit();
-
-        while (true) {
-            self.skipWhitespace();
-            if (self.pos >= self.content.len) {
-                return error.InvalidFormat;
-            }
-            if (self.content[self.pos] == ']') {
-                self.pos += 1;
-                break;
-            }
-
-            const item = try self.parseString();
-            try items.append(try self.allocator.dupe(u8, item));
-
-            self.skipWhitespace();
-            if (self.pos < self.content.len and self.content[self.pos] == ',') {
-                self.pos += 1;
-            }
-        }
-
-        return try items.toOwnedSlice();
-    }
-
-    fn findKey(self: *Self, key: []const u8) ?usize {
-        const start_pos = self.pos;
-        while (self.pos < self.content.len) {
-            const line_start = self.pos;
-            
-            while (self.pos < self.content.len and self.content[self.pos] != '\n') {
-                self.pos += 1;
-            }
-            
-            const line = self.content[line_start..self.pos];
-            
-            if (std.mem.indexOf(u8, line, key)) |key_pos| {
-                if (std.mem.indexOf(u8, line[key_pos..], "=")) |eq_pos| {
-                    self.pos = line_start + key_pos + eq_pos + 1;
-                    return self.pos;
-                }
-            }
-            
-            if (self.pos < self.content.len) {
-                self.pos += 1;
-            }
-        }
-        self.pos = start_pos;
-        return null;
-    }
-};
-
-pub fn loadInstallConfig(allocator: std.mem.Allocator, file_path: []const u8) !InstallConfig {
-    const file_content = std.fs.cwd().readFileAlloc(allocator, file_path, 1024 * 1024) catch |err| {
-        switch (err) {
-            error.FileNotFound => {
-                return InstallConfig.init(allocator);
-            },
-            else => {
-                std.debug.print("Failed to read install file '{s}': {}\n", .{ file_path, err });
-                return err;
-            },
-        }
-    };
-    defer allocator.free(file_content);
-
-    var parser = InstallTomlParser.init(allocator, file_content);
-    var config = InstallConfig.init(allocator);
-
-    var lines = std.mem.splitScalar(u8, file_content, '\n');
-    while (lines.next()) |line| {
-        const trimmed = std.mem.trim(u8, line, " \t\r");
-        if (trimmed.len == 0 or trimmed[0] == '#') continue;
-        
-        if (std.mem.indexOf(u8, trimmed, "=")) |eq_pos| {
-            const key = std.mem.trim(u8, trimmed[0..eq_pos], " \t");
-            const value_part = std.mem.trim(u8, trimmed[eq_pos + 1..], " \t");
-            
-            if (value_part.len > 0) {
-                if (value_part[0] == '[') {
-                    parser.pos = @intCast(@intFromPtr(value_part.ptr) - @intFromPtr(file_content.ptr));
-                    const values = parser.parseArray() catch continue;
-                    config.setMultipleSelection(key, values) catch {
-                        for (values) |val| allocator.free(val);
-                        allocator.free(values);
-                        continue;
-                    };
-                    for (values) |val| allocator.free(val);
-                    allocator.free(values);
-                } else if (value_part[0] == '"') {
-                    parser.pos = @intCast(@intFromPtr(value_part.ptr) - @intFromPtr(file_content.ptr));
-                    const value = parser.parseString() catch continue;
-                    config.setSingleSelection(key, value) catch {};
-                }
-            }
-        }
-    }
-
-    return config;
-}
+// Function already re-exported above
 
 pub fn createInstallConfigFromMenu(allocator: std.mem.Allocator, menu_config: *const @import("menu.zig").MenuConfig) !InstallConfig {
     var install_config = InstallConfig.init(allocator);
@@ -237,12 +89,9 @@ pub fn createInstallConfigFromMenu(allocator: std.mem.Allocator, menu_config: *c
     while (menu_iterator.next()) |entry| {
         const item = entry.value_ptr;
         
-        // Save all selector and multiple_selection items to install.toml
         if (item.type == .selector or item.type == .multiple_selection) {
-            // Use install_key if available, otherwise use item ID
             const key_name = item.install_key orelse item.id;
             const key = key_name;
-            // Convert key to lowercase for consistency
             var lowercase_key = try allocator.alloc(u8, key.len);
             defer allocator.free(lowercase_key);
             for (key, 0..) |c, i| {
@@ -251,17 +100,14 @@ pub fn createInstallConfigFromMenu(allocator: std.mem.Allocator, menu_config: *c
             
             switch (item.type) {
                 .multiple_selection => {
-                    // Use multiple_defaults if available, otherwise empty array
                     if (item.multiple_defaults) |defaults| {
                         try install_config.setMultipleSelection(lowercase_key, defaults);
                     } else {
-                        // Create empty array for multiple selection
                         const empty_array = try allocator.alloc([]const u8, 0);
                         try install_config.setMultipleSelection(lowercase_key, empty_array);
                     }
                 },
                 .selector => {
-                    // Use default_value if available, otherwise first option, otherwise empty string
                     var default_val: []const u8 = "";
                     if (item.default_value) |def_val| {
                         default_val = def_val;
@@ -273,7 +119,6 @@ pub fn createInstallConfigFromMenu(allocator: std.mem.Allocator, menu_config: *c
                     try install_config.setSingleSelection(lowercase_key, default_val);
                 },
                 else => {
-                    // For other types, just create an empty single selection
                     try install_config.setSingleSelection(lowercase_key, "");
                 }
             }
@@ -291,7 +136,6 @@ pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, me
     var menu_iterator = menu_config.items.iterator();
     while (menu_iterator.next()) |entry| {
         const item = entry.value_ptr;
-        // Check for install_key from selector or multiple_selection items
         if (item.type == .selector or item.type == .multiple_selection) {
             const key_name = item.install_key orelse item.id;
             const key = key_name;
@@ -301,7 +145,7 @@ pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, me
             for (key, 0..) |c, i| {
                 lowercase_key[i] = std.ascii.toLower(c);
             }
-            try expected_keys.append(try install_config.allocator.dupe(u8, lowercase_key));
+            try expected_keys.append(try memory.dupeString(install_config.allocator, lowercase_key));
         }
     }
     defer {
@@ -345,11 +189,9 @@ pub fn updateInstallConfigWithMenuDefaults(install_config: *InstallConfig, menu_
     while (menu_iterator.next()) |entry| {
         const item = entry.value_ptr;
         
-        // Check for install_key from selector or multiple_selection items
         if (item.type == .selector or item.type == .multiple_selection) {
             const key_name = item.install_key orelse item.id;
             const key = key_name;
-            // Convert key to lowercase for consistency
             var lowercase_key = try install_config.allocator.alloc(u8, key.len);
             defer install_config.allocator.free(lowercase_key);
             for (key, 0..) |c, i| {
@@ -384,35 +226,4 @@ pub fn updateInstallConfigWithMenuDefaults(install_config: *InstallConfig, menu_
     }
 }
 
-pub fn saveInstallConfig(config: *const InstallConfig, file_path: []const u8) !void {
-    const file = std.fs.cwd().createFile(file_path, .{}) catch |err| {
-        std.debug.print("Failed to create install file '{s}': {}\n", .{ file_path, err });
-        return err;
-    };
-    defer file.close();
-
-    const writer = file.writer();
-    
-    try writer.writeAll("# Nocturne Installation Configuration\n");
-    try writer.writeAll("# This file stores selection values from multiple selection and selector menu items\n\n");
-
-    var iterator = config.selections.iterator();
-    while (iterator.next()) |entry| {
-        const key = entry.key_ptr.*;
-        const value = entry.value_ptr.*;
-        
-        switch (value) {
-            .single => |val| {
-                try writer.print("{s} = \"{s}\"\n", .{ key, val });
-            },
-            .multiple => |vals| {
-                try writer.print("{s} = [", .{key});
-                for (vals, 0..) |val, i| {
-                    if (i > 0) try writer.writeAll(", ");
-                    try writer.print("\"{s}\"", .{val});
-                }
-                try writer.writeAll("]\n");
-            },
-        }
-    }
-}
+// Function already re-exported above

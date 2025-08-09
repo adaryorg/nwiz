@@ -44,6 +44,9 @@ pub const MenuItem = struct {
     
     // Disclaimer configuration for actions
     disclaimer: ?[]const u8 = null, // Path to disclaimer text file to show before execution
+    
+    // Menu ordering configuration
+    index: ?u32 = null, // Optional ordering index (starts at 1, use 10, 20, 30... for spacing)
 
     pub fn deinit(self: *MenuItem, allocator: std.mem.Allocator) void {
         // Free all allocated strings

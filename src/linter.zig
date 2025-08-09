@@ -4,6 +4,7 @@
 const std = @import("std");
 const config = @import("config.zig");
 const menu = @import("menu.zig");
+const memory = @import("utils/memory.zig");
 
 const ValidationError = struct {
     item_id: []const u8,
@@ -12,11 +13,13 @@ const ValidationError = struct {
 
 const ValidationResult = struct {
     errors: std.ArrayList(ValidationError),
+    warnings: std.ArrayList(ValidationError),
     allocator: std.mem.Allocator,
     
     pub fn init(allocator: std.mem.Allocator) ValidationResult {
         return ValidationResult{
             .errors = std.ArrayList(ValidationError).init(allocator),
+            .warnings = std.ArrayList(ValidationError).init(allocator),
             .allocator = allocator,
         };
     }
@@ -26,18 +29,34 @@ const ValidationResult = struct {
             self.allocator.free(error_item.item_id);
             self.allocator.free(error_item.message);
         }
+        for (self.warnings.items) |warning_item| {
+            self.allocator.free(warning_item.item_id);
+            self.allocator.free(warning_item.message);
+        }
         self.errors.deinit();
+        self.warnings.deinit();
     }
     
     pub fn addError(self: *ValidationResult, item_id: []const u8, message: []const u8) !void {
         try self.errors.append(ValidationError{
-            .item_id = try self.allocator.dupe(u8, item_id),
-            .message = try self.allocator.dupe(u8, message),
+            .item_id = try memory.dupeString(self.allocator, item_id),
+            .message = try memory.dupeString(self.allocator, message),
+        });
+    }
+    
+    pub fn addWarning(self: *ValidationResult, item_id: []const u8, message: []const u8) !void {
+        try self.warnings.append(ValidationError{
+            .item_id = try memory.dupeString(self.allocator, item_id),
+            .message = try memory.dupeString(self.allocator, message),
         });
     }
     
     pub fn hasErrors(self: *const ValidationResult) bool {
         return self.errors.items.len > 0;
+    }
+    
+    pub fn hasWarnings(self: *const ValidationResult) bool {
+        return self.warnings.items.len > 0;
     }
     
     pub fn printErrors(self: *const ValidationResult, menu_path: []const u8) void {
@@ -49,9 +68,22 @@ const ValidationResult = struct {
             std.debug.print("\nValidation failed with {} error(s). Please fix the menu configuration.\n", .{self.errors.items.len});
         }
     }
+    
+    pub fn printWarnings(self: *const ValidationResult, explicit_lint: bool) void {
+        if (self.hasWarnings() and explicit_lint) {
+            std.debug.print("\nWarnings:\n", .{});
+            for (self.warnings.items) |warning_item| {
+                std.debug.print("WARNING [{s}]: {s}\n", .{ warning_item.item_id, warning_item.message });
+            }
+        }
+    }
 };
 
 pub fn validateMenuStrict(allocator: std.mem.Allocator, menu_toml_path: []const u8) !bool {
+    return validateMenuWithOptions(allocator, menu_toml_path, false);
+}
+
+pub fn validateMenuWithOptions(allocator: std.mem.Allocator, menu_toml_path: []const u8, explicit_lint: bool) !bool {
     // Load and parse the menu configuration
     var menu_config = config.loadMenuConfig(allocator, menu_toml_path) catch |err| {
         std.debug.print("CRITICAL: Failed to load menu configuration: {}\n", .{err});
@@ -73,18 +105,22 @@ pub fn validateMenuStrict(allocator: std.mem.Allocator, menu_toml_path: []const 
     // Validate raw TOML for unknown fields
     try validateRawTOMLFields(&validation, allocator, menu_toml_path);
     
+    // Validate index ordering (warnings only)
+    try validateIndexOrdering(&validation, &menu_config);
+    
     if (validation.hasErrors()) {
         validation.printErrors(menu_toml_path);
         return false;
     }
+    
+    // Print warnings only during explicit lint (--lint flag)
+    validation.printWarnings(explicit_lint);
     
     return true;
 }
 
 fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem, allocator: std.mem.Allocator, menu_toml_path: []const u8) !void {
     _ = menu_toml_path;
-    // Debug: print type and install_key information for specific items
-    // (Disabled to reduce output)
     
     switch (item.type) {
         .selector => {
@@ -167,7 +203,7 @@ fn validateMenuItem(validation: *ValidationResult, item: *const menu.MenuItem, a
             // Validate disclaimer file exists if specified
             if (item.disclaimer) |disclaimer_path| {
                 // Use the path as-is (relative paths are relative to current working directory)
-                const resolved_path = try allocator.dupe(u8, disclaimer_path);
+                const resolved_path = try memory.dupeString(allocator, disclaimer_path);
                 defer allocator.free(resolved_path);
                 
                 // Check if the file exists
@@ -244,8 +280,116 @@ fn validateRawTOMLFields(validation: *ValidationResult, allocator: std.mem.Alloc
 pub fn lintMenuFile(allocator: std.mem.Allocator, menu_toml_path: []const u8) !void {
     std.debug.print("Linting menu file: {s}\n", .{menu_toml_path});
     
-    const is_valid = try validateMenuStrict(allocator, menu_toml_path);
+    const is_valid = try validateMenuWithOptions(allocator, menu_toml_path, true);
     if (is_valid) {
         std.debug.print("Menu validation passed - no errors found.\n", .{});
+    }
+}
+
+// Validate index ordering and check for missing/duplicate indices
+fn validateIndexOrdering(validation: *ValidationResult, menu_config: *const menu.MenuConfig) !void {
+    // Collect all menu branches and their children
+    var branch_children = std.StringHashMap(std.ArrayList([]const u8)).init(validation.allocator);
+    defer {
+        var iter = branch_children.iterator();
+        while (iter.next()) |entry| {
+            entry.value_ptr.deinit();
+        }
+        branch_children.deinit();
+    }
+    
+    // Build parent-child relationships
+    var items_iter = menu_config.items.iterator();
+    while (items_iter.next()) |entry| {
+        const item_id = entry.key_ptr.*;
+        
+        // Skip __root__ item
+        if (std.mem.eql(u8, item_id, "__root__")) continue;
+        
+        // Determine parent
+        const parent_id = if (std.mem.lastIndexOf(u8, item_id, ".")) |last_dot|
+            item_id[0..last_dot]
+        else
+            "__root__";
+            
+        // Add to parent's children list
+        var gop = try branch_children.getOrPut(parent_id);
+        if (!gop.found_existing) {
+            gop.value_ptr.* = std.ArrayList([]const u8).init(validation.allocator);
+        }
+        try gop.value_ptr.append(item_id);
+    }
+    
+    // Check each branch for index issues
+    var branch_iter = branch_children.iterator();
+    while (branch_iter.next()) |entry| {
+        const parent_id = entry.key_ptr.*;
+        const children = entry.value_ptr.*;
+        
+        if (children.items.len <= 1) continue; // No point checking single items
+        
+        var indexed_count: usize = 0;
+        var missing_count: usize = 0;
+        var index_map = std.HashMap(u32, []const u8, std.hash_map.AutoContext(u32), std.hash_map.default_max_load_percentage).init(validation.allocator);
+        defer index_map.deinit();
+        
+        // Analyze indices in this branch
+        for (children.items) |child_id| {
+            if (menu_config.items.getPtr(child_id)) |child_item| {
+                if (child_item.index) |index| {
+                    indexed_count += 1;
+                    
+                    // Check for duplicate indices
+                    if (index_map.get(index)) |existing_id| {
+                        const msg = try std.fmt.allocPrint(validation.allocator, 
+                            "Duplicate index {} found (also used by '{s}')", .{ index, existing_id });
+                        defer validation.allocator.free(msg);
+                        try validation.addWarning(child_id, msg);
+                    } else {
+                        try index_map.put(index, child_id);
+                    }
+                } else {
+                    missing_count += 1;
+                }
+            }
+        }
+        
+        // Generate warnings based on analysis
+        if (indexed_count > 0 and missing_count > 0) {
+            const parent_name = if (std.mem.eql(u8, parent_id, "__root__"))
+                "root menu"
+            else
+                parent_id;
+                
+            const msg = try std.fmt.allocPrint(validation.allocator, 
+                "Branch '{s}' has mixed indexing: {} items with index, {} without. Consider adding index to all items for consistent ordering.", 
+                .{ parent_name, indexed_count, missing_count });
+            defer validation.allocator.free(msg);
+            
+            // Add warning to the first item without index
+            for (children.items) |child_id| {
+                if (menu_config.items.getPtr(child_id)) |child_item| {
+                    if (child_item.index == null) {
+                        try validation.addWarning(child_id, msg);
+                        break;
+                    }
+                }
+            }
+        } else if (indexed_count == 0 and children.items.len > 1) {
+            const parent_name = if (std.mem.eql(u8, parent_id, "__root__"))
+                "root menu"
+            else
+                parent_id;
+                
+            const msg = try std.fmt.allocPrint(validation.allocator, 
+                "Branch '{s}' has no indices. Consider adding index field to control menu ordering (recommended: 10, 20, 30...).", 
+                .{parent_name});
+            defer validation.allocator.free(msg);
+            
+            // Add warning to the first item
+            if (children.items.len > 0) {
+                try validation.addWarning(children.items[0], msg);
+            }
+        }
     }
 }
