@@ -12,6 +12,7 @@ const theme = @import("theme.zig");
 const tty_compat = @import("tty_compat.zig");
 const disclaimer = @import("disclaimer.zig");
 const memory = @import("utils/memory.zig");
+const app_context = @import("app_context.zig");
 
 pub const EventResult = enum {
     continue_running,
@@ -26,19 +27,30 @@ pub const AppState = enum {
 };
 
 pub const EventContext = struct {
-    allocator: std.mem.Allocator,
+    context: *const app_context.AppContext,
     app_state: *AppState,
     menu_state: *menu.MenuState,
     async_output_viewer: *?executor.AsyncOutputViewer,
     async_command_executor: *executor.AsyncCommandExecutor,
     install_config: *install.InstallConfig,
     install_config_path: []const u8,
-    app_theme: *const theme.Theme,
-    terminal_mode: tty_compat.TerminalMode,
     vx: *vaxis.Vaxis,
     global_shell_pid: *?std.posix.pid_t,
     global_async_executor: *?*executor.AsyncCommandExecutor,
     disclaimer_dialog: *?disclaimer.DisclaimerDialog,
+    
+    // Convenience accessors
+    pub fn allocator(self: *const EventContext) std.mem.Allocator {
+        return self.context.allocator;
+    }
+    
+    pub fn appTheme(self: *const EventContext) *const theme.Theme {
+        return self.context.theme;
+    }
+    
+    pub fn terminal_mode(self: *const EventContext) tty_compat.TerminalMode {
+        return self.context.terminal_mode;
+    }
 };
 
 pub fn handleKeyPress(key: vaxis.Key, context: *EventContext) !EventResult {
@@ -95,7 +107,7 @@ fn handleMultipleSelectionModeKeyPress(key: vaxis.Key, context: *EventContext) !
         // Save to install.toml if multiple selection has install_key
         if (context.menu_state.selected_index < context.menu_state.current_items.len) {
             const current_item = &context.menu_state.current_items[context.menu_state.selected_index];
-            try install_integration.saveMultipleSelectionToInstallConfig(context.allocator, current_item, context.menu_state, context.install_config, context.install_config_path);
+            try install_integration.saveMultipleSelectionToInstallConfig(context.allocator(), current_item, context.menu_state, context.install_config, context.install_config_path);
         }
     } else if (key.matches(vaxis.Key.escape, .{})) {
         context.menu_state.exitMultipleSelectionMode();
@@ -117,7 +129,7 @@ fn handleSelectorModeKeyPress(key: vaxis.Key, context: *EventContext) !EventResu
         // Save to install.toml if selector has install_key
         if (context.menu_state.selected_index < context.menu_state.current_items.len) {
             const current_item = &context.menu_state.current_items[context.menu_state.selected_index];
-            try install_integration.saveSingleSelectionToInstallConfig(context.allocator, current_item, context.menu_state, context.install_config, context.install_config_path);
+            try install_integration.saveSingleSelectionToInstallConfig(context.allocator(), current_item, context.menu_state, context.install_config, context.install_config_path);
         }
     } else if (key.matches(vaxis.Key.escape, .{})) {
         context.menu_state.exitSelectorMode();
@@ -180,16 +192,16 @@ fn handleMenuEnterKey(context: *EventContext) !EventResult {
     } else if (current_item.type == .multiple_selection) {
         _ = context.menu_state.enterMultipleSelectionMode();
     } else if (context.menu_state.getCurrentActionWithSubstitution() catch null) |command| {
-        defer context.allocator.free(command); // Free the allocated command string
+        defer context.context.free(command); // Free the allocated command string
         
         // Check if action has a disclaimer
         if (current_item.disclaimer) |disclaimer_path| {
             // Use disclaimer path as-is (relative paths are relative to current working directory)
-            const resolved_disclaimer_path = try memory.dupeString(context.allocator, disclaimer_path);
-            defer context.allocator.free(resolved_disclaimer_path);
+            const resolved_disclaimer_path = try context.context.dupeString(disclaimer_path);
+            defer context.context.free(resolved_disclaimer_path);
             
             // Show disclaimer dialog
-            context.disclaimer_dialog.* = disclaimer.DisclaimerDialog.init(context.allocator, resolved_disclaimer_path, current_item.name, context.app_theme, context.terminal_mode) catch |err| {
+            context.disclaimer_dialog.* = disclaimer.DisclaimerDialog.init(context.allocator(), resolved_disclaimer_path, current_item.name, context.appTheme(), context.terminal_mode()) catch |err| {
                 std.debug.print("Failed to load disclaimer from {s}: {}\n", .{ resolved_disclaimer_path, err });
                 return EventResult.continue_running;
             };
@@ -297,15 +309,15 @@ fn handleExitConfirmationKeyPress(key: vaxis.Key, context: *EventContext) !Event
 }
 
 fn startActionCommand(context: *EventContext, command: []const u8, current_item: *const menu.MenuItem) !void {
-    const command_copy = try memory.dupeString(context.allocator, command);
-    const menu_item_name_copy = try memory.dupeString(context.allocator, current_item.name);
+    const command_copy = try context.context.dupeString(command);
+    const menu_item_name_copy = try context.context.dupeString(current_item.name);
     context.async_command_executor.startCommand(command) catch |err| {
-        context.allocator.free(command_copy);
-        context.allocator.free(menu_item_name_copy);
+        context.context.free(command_copy);
+        context.context.free(menu_item_name_copy);
         std.debug.print("Failed to start command: {}\n", .{err});
         return;
     };
-    context.async_output_viewer.* = executor.AsyncOutputViewer.init(context.allocator, context.async_command_executor, command_copy, menu_item_name_copy, context.app_theme, context.menu_state.config.ascii_art, context.terminal_mode, current_item.nwiz_status_prefix, current_item.show_output);
+    context.async_output_viewer.* = executor.AsyncOutputViewer.init(context.allocator(), context.async_command_executor, command_copy, menu_item_name_copy, context.appTheme(), context.menu_state.config.ascii_art, context.terminal_mode(), current_item.nwiz_status_prefix, current_item.show_output);
     context.app_state.* = .viewing_output;
 }
 
@@ -334,7 +346,7 @@ fn handleDisclaimerViewingKeyPress(key: vaxis.Key, context: *EventContext) !Even
             
             const current_item = &context.menu_state.current_items[context.menu_state.selected_index];
             if (context.menu_state.getCurrentActionWithSubstitution() catch null) |command| {
-                defer context.allocator.free(command);
+                defer context.context.free(command);
                 
                 // Clean up disclaimer dialog before starting command
                 dialog.deinit();

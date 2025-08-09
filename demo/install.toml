@@ -3,7 +3,7 @@
 
 [install]
 theme = "dark"
-dev_tools = ["vim", "nodejs", "python"]
+dev_tools = []
 editor_type = "vim"
 shell_type = "bash"
 project_lang = "javascript"
