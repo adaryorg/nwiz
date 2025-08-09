@@ -11,7 +11,7 @@ const ValidationError = struct {
     message: []const u8,
 };
 
-const ValidationResult = struct {
+pub const ValidationResult = struct {
     errors: std.ArrayList(ValidationError),
     warnings: std.ArrayList(ValidationError),
     allocator: std.mem.Allocator,
