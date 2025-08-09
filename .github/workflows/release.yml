@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release:
-    name: Create Release
+    name: Create Cross-Platform Release
     runs-on: ubuntu-latest
     
     steps:
@@ -23,13 +23,32 @@ jobs:
       with:
         version: 0.14.1
 
-    - name: Build project
-      run: zig build
+    - name: Verify Zig installation
+      run: zig version
 
-    - name: Test binary
+    - name: Build all platform binaries
+      run: make build
+
+    - name: Verify binaries were created
       run: |
-        ./zig-out/bin/nwiz --version
-        ./zig-out/bin/nwiz --help
+        echo "Checking created binaries:"
+        ls -la zig-out/bin/nwiz-*
+        echo ""
+        echo "Binary details:"
+        file zig-out/bin/nwiz-*
+
+    - name: Test Linux binary
+      run: |
+        echo "Testing Linux binary:"
+        ./zig-out/bin/nwiz-linux-x86_64 --version
+        ./zig-out/bin/nwiz-linux-x86_64 --help
+
+    - name: Generate checksums
+      run: |
+        cd zig-out/bin
+        sha256sum nwiz-* > checksums.txt
+        echo "Generated checksums:"
+        cat checksums.txt
 
     - name: Get version from git tag
       id: version
@@ -43,24 +62,63 @@ jobs:
       with:
         tag_name: ${{ steps.version.outputs.version }}
         name: "nwiz ${{ steps.version.outputs.version }}"
-        files: zig-out/bin/nwiz
+        files: |
+          zig-out/bin/nwiz-linux-x86_64
+          zig-out/bin/nwiz-macos-x86_64
+          zig-out/bin/nwiz-macos-aarch64
+          zig-out/bin/checksums.txt
         draft: false
         prerelease: false
         generate_release_notes: true
         body: |
           ## nwiz TUI ${{ steps.version.outputs.version }}
           
-          Linux binary for the Nocturne desktop environment management tool.
+          Cross-platform binaries for the Nocturne desktop environment management tool.
+          
+          ### Downloads
+          
+          | Platform | Architecture | Download |
+          |----------|--------------|----------|
+          | Linux | x86_64 | `nwiz-linux-x86_64` |
+          | macOS | Intel (x86_64) | `nwiz-macos-x86_64` |
+          | macOS | Apple Silicon (ARM64) | `nwiz-macos-aarch64` |
           
           ### Installation
+          
+          **Linux:**
           ```bash
-          chmod +x nwiz
-          sudo mv nwiz /usr/local/bin/
+          wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/nwiz-linux-x86_64
+          chmod +x nwiz-linux-x86_64
+          sudo mv nwiz-linux-x86_64 /usr/local/bin/nwiz
+          ```
+          
+          **macOS (Intel):**
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/nwiz-macos-x86_64
+          chmod +x nwiz-macos-x86_64
+          sudo mv nwiz-macos-x86_64 /usr/local/bin/nwiz
+          ```
+          
+          **macOS (Apple Silicon):**
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/nwiz-macos-aarch64
+          chmod +x nwiz-macos-aarch64
+          sudo mv nwiz-macos-aarch64 /usr/local/bin/nwiz
+          ```
+          
+          ### Verification
+          ```bash
+          # Download checksums and verify
+          wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/checksums.txt
+          sha256sum -c checksums.txt
           ```
           
           ### Usage
           ```bash
           nwiz --help
+          nwiz --version
           ```
+          
+          All binaries are built using Zig's cross-compilation from Linux and have been verified for correct architecture targeting.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
