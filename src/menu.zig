@@ -125,6 +125,7 @@ pub const MenuConfig = struct {
     root_menu_id: []const u8,
     ascii_art: [][]const u8,
     shell: []const u8,
+    logfile: ?[]const u8,
     items: std.HashMap([]const u8, MenuItem, std.hash_map.StringContext, std.hash_map.default_max_load_percentage),
 
     pub fn init(allocator: std.mem.Allocator) MenuConfig {
@@ -134,6 +135,7 @@ pub const MenuConfig = struct {
             .root_menu_id = "",
             .ascii_art = &[_][]const u8{},
             .shell = "bash", // Default to bash
+            .logfile = null,
             .items = std.HashMap([]const u8, MenuItem, std.hash_map.StringContext, std.hash_map.default_max_load_percentage).init(allocator),
         };
     }
@@ -145,6 +147,9 @@ pub const MenuConfig = struct {
         allocator.free(self.root_menu_id);
         // Always free shell since it's always allocated by parseString()
         allocator.free(self.shell);
+        if (self.logfile) |logfile| {
+            allocator.free(logfile);
+        }
         
         // Free ASCII art
         for (self.ascii_art) |line| {

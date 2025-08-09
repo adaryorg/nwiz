@@ -22,6 +22,7 @@ const event_handler = @import("event_handler.zig");
 const disclaimer = @import("disclaimer.zig");
 const app_context = @import("app_context.zig");
 const error_handler = @import("error_handler.zig");
+const session_logger = @import("session_logger.zig");
 
 var global_async_executor: ?*executor.AsyncCommandExecutor = null;
 pub var global_shell_pid: ?std.posix.pid_t = null;
@@ -165,6 +166,17 @@ fn handleAuthentication(app_config: *const cli.AppConfig) !void {
     }
 }
 
+fn determineLogFilePath(app_config: *const cli.AppConfig, menu_config: *const menu.MenuConfig) []const u8 {
+    // Priority order: 1) CLI parameter, 2) menu config, 3) default
+    if (app_config.log_file_path) |cli_path| {
+        return cli_path;
+    } else if (menu_config.logfile) |config_path| {
+        return config_path;
+    } else {
+        return "nwiz-log.txt";
+    }
+}
+
 fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppConfig, err_handler: *const error_handler.ErrorHandler) !void {
     // Validate menu configuration before proceeding
     const menu_config_path = app_config.config_file orelse "~/.config/nwiz/menu.toml";
@@ -180,6 +192,25 @@ fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppC
     // Load configurations
     var configs = try app_init.loadConfigurations(allocator, app_config.*);
     defer configs.deinit(allocator);
+
+    // Initialize session logging
+    const log_file_path = determineLogFilePath(app_config, &configs.menu_config);
+    session_logger.SessionLogger.testWriteAccess(allocator, log_file_path) catch |err| {
+        std.debug.print("Failed to initialize log file '{s}': {}\n", .{ log_file_path, err });
+        std.debug.print("Please check permissions or specify a different log file with --log-file\n", .{});
+        return;
+    };
+
+    _ = session_logger.initGlobalLogger(allocator, log_file_path) catch |err| {
+        std.debug.print("Failed to initialize session logger: {}\n", .{err});
+        return;
+    };
+    defer {
+        if (session_logger.getGlobalSessionSummary()) |summary| {
+            summary.printSummary();
+        }
+        session_logger.deinitGlobalLogger(allocator);
+    }
 
     // Initialize and run TUI
     try initializeAndRunTUI(allocator, &configs, app_config, err_handler);

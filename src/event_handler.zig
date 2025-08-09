@@ -13,6 +13,7 @@ const tty_compat = @import("tty_compat.zig");
 const disclaimer = @import("disclaimer.zig");
 const memory = @import("utils/memory.zig");
 const app_context = @import("app_context.zig");
+const session_logger = @import("session_logger.zig");
 
 pub const EventResult = enum {
     continue_running,
@@ -257,12 +258,22 @@ fn handleOutputViewingKeyPress(key: vaxis.Key, context: *EventContext) !EventRes
             const available_height = context.vx.window().height -| 6; // Account for borders and footer
             viewer.scrollPageDown(available_height);
         } else if (key.matches(vaxis.Key.escape, .{})) {
+            // Log command output before cleanup by getting info from AsyncOutputViewer
+            if (context.async_output_viewer.*) |*output_viewer| {
+                if (context.async_command_executor.getExitCode()) |exit_code| {
+                    const output = context.async_command_executor.getOutput();
+                    const error_output = context.async_command_executor.getErrorOutput();
+                    session_logger.logGlobalCommand(output_viewer.command, output_viewer.menu_item_name, output, error_output, exit_code);
+                }
+            }
+            
             // Clean up command if still running
             context.async_command_executor.cleanup();
             if (context.async_output_viewer.*) |*output_viewer| {
                 output_viewer.deinit();
             }
             context.async_output_viewer.* = null;
+            
             context.app_state.* = .menu;
         } else if (key.codepoint == 'c') {
             // Kill running command with 'c' key
@@ -317,6 +328,7 @@ fn startActionCommand(context: *EventContext, command: []const u8, current_item:
         std.debug.print("Failed to start command: {}\n", .{err});
         return;
     };
+    
     context.async_output_viewer.* = executor.AsyncOutputViewer.init(context.allocator(), context.async_command_executor, command_copy, menu_item_name_copy, context.appTheme(), context.menu_state.config.ascii_art, context.terminal_mode(), current_item.nwiz_status_prefix, current_item.show_output);
     context.app_state.* = .viewing_output;
 }

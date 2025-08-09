@@ -2,8 +2,8 @@
 # This file stores selection values from multiple selection and selector menu items
 
 [install]
-theme = "dark"
-dev_tools = []
+theme = "light"
+dev_tools = ["git", "vim", "nodejs", "python", "docker", "curl"]
 editor_type = "vim"
 shell_type = "bash"
 project_lang = "javascript"
