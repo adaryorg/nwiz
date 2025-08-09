@@ -32,14 +32,14 @@ jobs:
       run: zig build
 
     - name: Test version output
-      run: ./zig-out/bin/nwizard --version
+      run: ./zig-out/bin/nwiz --version
 
     - name: Test help output
-      run: ./zig-out/bin/nwizard --help
+      run: ./zig-out/bin/nwiz --help
 
     - name: Upload binary artifact
       uses: actions/upload-artifact@v4
       with:
-        name: nwizard-linux-x86_64-${{ github.sha }}
-        path: zig-out/bin/nwizard
+        name: nwiz-linux-x86_64-${{ github.sha }}
+        path: zig-out/bin/nwiz
         retention-days: 90

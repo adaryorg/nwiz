@@ -37,7 +37,7 @@ pub const MenuItem = struct {
     install_key: ?[]const u8 = null, // Key in install.toml file for storing selections
     
     // Status reporting configuration
-    nwizard_status_prefix: ?[]const u8 = null, // Prefix for status messages from child process
+    nwiz_status_prefix: ?[]const u8 = null, // Prefix for status messages from child process
     
     // Output display configuration for actions
     show_output: ?bool = null, // Control initial display mode: null=default spinner, true=start with output, false=start with spinner
@@ -107,7 +107,7 @@ pub const MenuItem = struct {
         if (self.install_key) |key| {
             allocator.free(key);
         }
-        if (self.nwizard_status_prefix) |prefix| {
+        if (self.nwiz_status_prefix) |prefix| {
             allocator.free(prefix);
         }
         if (self.disclaimer) |disclaimer_path| {

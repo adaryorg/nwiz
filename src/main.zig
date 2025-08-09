@@ -133,7 +133,7 @@ pub fn main() !void {
     }
 
     // Validate menu configuration before proceeding
-    const menu_config_path = app_config.config_file orelse "~/.config/nwizard/menu.toml";
+    const menu_config_path = app_config.config_file orelse "~/.config/nwiz/menu.toml";
     const is_menu_valid = linter.validateMenuStrict(allocator, menu_config_path) catch |err| {
         std.debug.print("Failed to validate menu configuration: {}\n", .{err});
         return;

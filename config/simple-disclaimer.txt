@@ -1,0 +1,7 @@
+SIMPLE DISCLAIMER
+
+This is a simple test disclaimer with basic text.
+
+Do you want to proceed with this action?
+
+Press Y to continue or N to cancel.

@@ -1,9 +1,9 @@
-# nwizard
+# nwiz
 
-[![Build Status](https://github.com/adaryorg/nwizard/actions/workflows/build.yml/badge.svg)](https://github.com/adaryorg/nocturne/actions/workflows/build.yml)
-[![Release](https://github.com/adaryorg/nwizard/actions/workflows/release.yml/badge.svg)](https://github.com/adaryorg/nocturne/actions/workflows/release.yml)
-[![License](https://img.shields.io/github/license/adaryorg/nwizard)](LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/adaryorg/nwizard)](https://github.com/adaryorg/nwizard/releases/latest)
+[![Build Status](https://github.com/adaryorg/nwiz/actions/workflows/build.yml/badge.svg)](https://github.com/adaryorg/nocturne/actions/workflows/build.yml)
+[![Release](https://github.com/adaryorg/nwiz/actions/workflows/release.yml/badge.svg)](https://github.com/adaryorg/nocturne/actions/workflows/release.yml)
+[![License](https://img.shields.io/github/license/adaryorg/nwiz)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/adaryorg/nwiz)](https://github.com/adaryorg/nwiz/releases/latest)
 
 A terminal-based installation wizard for the Nocturne desktop environment ecosystem. Provides menu-driven configuration and component management through a clean TUI interface.
 
@@ -21,9 +21,9 @@ A terminal-based installation wizard for the Nocturne desktop environment ecosys
 ### From Release
 
 ```bash
-wget https://github.com/adaryorg/nwizard/releases/latest/download/nwizard
-chmod +x nwizard
-sudo mv nwizard /usr/local/bin/
+wget https://github.com/adaryorg/nwiz/releases/latest/download/nwiz
+chmod +x nwiz
+sudo mv nwiz /usr/local/bin/
 ```
 
 ### From Source
@@ -31,10 +31,10 @@ sudo mv nwizard /usr/local/bin/
 Requires Zig 0.14.1+:
 
 ```bash
-git clone https://github.com/adaryorg/nwizard.git
-cd nwizard
+git clone https://github.com/adaryorg/nwiz.git
+cd nwiz
 zig build
-sudo cp zig-out/bin/nwizard /usr/local/bin/
+sudo cp zig-out/bin/nwiz /usr/local/bin/
 ```
 
 ## Usage
@@ -43,35 +43,36 @@ sudo cp zig-out/bin/nwizard /usr/local/bin/
 
 ```bash
 # Start the TUI interface
-nwizard
+nwiz
 
 # Use custom configuration
-nwizard --config /path/to/menu.toml
+nwiz --config /path/to/menu.toml
 
 # Test mode without sudo
-nwizard --no-sudo
+nwiz --no-sudo
 ```
 
 ### Command Line Tools
 
 ```bash
 # Validate menu configuration
-nwizard --lint menu.toml
+nwiz --lint menu.toml
 
 # Export configuration as environment variables
-eval $(nwizard --config-options install.toml)
+
+eval $(nwiz --config-options install.toml)
 
 # List available theme names only
-nwizard --list-themes
+nwiz --list-themes
 
 # Preview a single specific theme
-nwizard --show-theme forest
+nwiz --show-theme forest
 
 # Preview ALL themes at once
-nwizard --show-themes
+nwiz --show-themes
 
 # Export theme to file
-nwizard --theme rainbow --write-theme my-theme.toml
+nwiz --theme rainbow --write-theme my-theme.toml
 ```
 
 ### Navigation
@@ -87,7 +88,7 @@ nwizard --theme rainbow --write-theme my-theme.toml
 
 ## Configuration
 
-Configuration files are stored in `~/.config/nwizard/`:
+Configuration files are stored in `~/.config/nwiz/`:
 
 - `menu.toml` - Menu structure and commands (required)
 - `theme.toml` - Visual customization (optional)  

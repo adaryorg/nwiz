@@ -682,8 +682,8 @@ pub fn writeThemeToFile(allocator: std.mem.Allocator, theme_instance: Theme, fil
     var writer = file.writer();
     
     // Write theme header
-    try writer.print("# Generated theme file by nwizard\n", .{});
-    try writer.print("# This theme can be used with: nwizard --theme {s}\n\n", .{file_path});
+    try writer.print("# Generated theme file by nwiz\n", .{});
+    try writer.print("# This theme can be used with: nwiz --theme {s}\n\n", .{file_path});
     
     // Write gradient section
     try writer.print("[gradient]\n", .{});

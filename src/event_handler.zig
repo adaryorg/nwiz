@@ -307,7 +307,7 @@ fn startActionCommand(context: *EventContext, command: []const u8, current_item:
         std.debug.print("Failed to start command: {}\n", .{err});
         return;
     };
-    context.async_output_viewer.* = executor.AsyncOutputViewer.init(context.allocator, context.async_command_executor, command_copy, menu_item_name_copy, context.app_theme, context.menu_state.config.ascii_art, context.terminal_mode, current_item.nwizard_status_prefix, current_item.show_output);
+    context.async_output_viewer.* = executor.AsyncOutputViewer.init(context.allocator, context.async_command_executor, command_copy, menu_item_name_copy, context.app_theme, context.menu_state.config.ascii_art, context.terminal_mode, current_item.nwiz_status_prefix, current_item.show_output);
     context.app_state.* = .viewing_output;
 }
 
