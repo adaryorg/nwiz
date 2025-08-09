@@ -5,6 +5,7 @@ const std = @import("std");
 const vaxis = @import("vaxis");
 const theme = @import("theme.zig");
 const tty_compat = @import("tty_compat.zig");
+const memory = @import("utils/memory.zig");
 
 pub const DisclaimerDialog = struct {
     allocator: std.mem.Allocator,
@@ -56,12 +57,12 @@ pub const DisclaimerDialog = struct {
             break :blk try clean_text.toOwnedSlice();
         };
         
-        const dialog_title = try std.fmt.allocPrint(allocator, " Disclaimer - {s} ", .{menu_item_name});
+        const dialog_title = try memory.formatString(allocator, " Disclaimer - {s} ", .{menu_item_name});
         
         return Self{
             .allocator = allocator,
             .disclaimer_text = disclaimer_text,
-            .menu_item_name = try allocator.dupe(u8, menu_item_name),
+            .menu_item_name = try memory.dupeString(allocator, menu_item_name),
             .dialog_title = dialog_title,
             .scroll_offset = 0,
             .confirmed = false,
@@ -138,7 +139,6 @@ pub const DisclaimerDialog = struct {
         // Draw border using simple fill approach
         var row: u16 = y_offset;
         const end_x: u16 = x_offset + dialog_width;
-        _ = y_offset + dialog_height; // Not used in current implementation
         
         // Draw top border
         var col: u16 = x_offset;

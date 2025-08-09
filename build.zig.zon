@@ -40,6 +40,10 @@
             .url = "git+https://github.com/rockorager/libvaxis.git#cc9154d5f4afa3fdfd289157f195ec67804ef437",
             .hash = "vaxis-0.5.1-BWNV_MYNCQDO92x2PTpsfv6GwDHmjL98rf6iL3pbMLj4",
         },
+        .toml = .{
+            .url = "git+https://github.com/sam701/zig-toml#e40c1046e16601e6ab22892012c397e0bacb7429",
+            .hash = "12205b6a4ff1dba236e562039eac864c44fb5ea8f5771b8b14dbf8af7d065b52213a",
+        },
     },
     .paths = .{
         "build.zig",

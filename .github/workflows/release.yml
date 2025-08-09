@@ -26,6 +26,9 @@ jobs:
     - name: Verify Zig installation
       run: zig version
 
+    - name: Run tests before building
+      run: make test
+
     - name: Build all platform binaries
       run: make build
 

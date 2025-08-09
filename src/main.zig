@@ -50,7 +50,6 @@ fn signalHandler(sig: c_int) callconv(.C) void {
         global_shell_pid = null;
     }
     
-    // Set immediate exit flag
     terminal.signal_exit_requested = true;
     
     // Do terminal restoration but don't use vaxis methods that might block
@@ -69,12 +68,10 @@ const Event = union(enum) {
 
 const AppState = event_handler.AppState;
 
-// Lint mode - validate menu.toml file structure and integrity
 fn lintMenuMode(allocator: std.mem.Allocator, menu_toml_path: []const u8) !void {
     try linter.lintMenuFile(allocator, menu_toml_path);
 }
 
-// Read configuration options mode - export install.toml values as NWIZ_* environment variables  
 fn readConfigurationOptionsMode(allocator: std.mem.Allocator, install_toml_path: []const u8) !void {
     try configuration_reader.readConfigurationOptions(allocator, install_toml_path);
 }
@@ -92,7 +89,7 @@ pub fn main() !void {
     defer cli.deinitAppConfig(allocator, &app_config);
     
     if (!app_config.should_continue) {
-        return; // Exit after handling --version or --help
+        return;
     }
 
     // Handle special read-configuration-options mode
@@ -126,7 +123,7 @@ pub fn main() !void {
     if (app_config.use_sudo) {
         const auth_success = try sudo.authenticateInitial();
         if (!auth_success) {
-            return; // Exit if sudo authentication fails
+            return;
         }
     } else {
         std.debug.print("Running in no-sudo mode - commands requiring privileges may fail.\n", .{});
@@ -139,7 +136,6 @@ pub fn main() !void {
         return;
     };
     if (!is_menu_valid) {
-        // Validation errors already printed by validateMenuStrict
         return;
     }
 
@@ -201,12 +197,10 @@ pub fn main() !void {
 
     // Extract references for easier access
     const menu_config = &configs.menu_config;
-    var install_config = &configs.install_config;
-    _ = &install_config; // Force mutable reference for event handler
+    const install_config = &configs.install_config;
     const install_config_path = configs.install_config_path;
     const app_theme = &configs.app_theme;
 
-    // Initialize menu state
     var menu_state = menu.MenuState.init(allocator, menu_config, configs.menu_config_path) catch {
         return;
     };
@@ -221,9 +215,8 @@ pub fn main() !void {
         .terminal_mode = terminal_mode,
     };
 
-    // Initialize async command executor
     var async_command_executor = executor.AsyncCommandExecutor.init(allocator);
-    async_command_executor.setShell(menu_config.shell); // Use configured shell
+    async_command_executor.setShell(menu_config.shell);
     defer {
         global_async_executor = null;
         async_command_executor.deinit();
