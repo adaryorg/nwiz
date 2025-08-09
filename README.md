@@ -59,6 +59,7 @@ nwiz --no-sudo
 nwiz --lint menu.toml
 
 # Export configuration as environment variables
+
 eval $(nwiz --config-options install.toml)
 
 # List available theme names only
