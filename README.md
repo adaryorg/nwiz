@@ -12,6 +12,7 @@ A terminal-based installation wizard for the Nocturne desktop environment ecosys
 - Menu-driven navigation with TOML configuration
 - Real-time command execution with live output
 - Installation state tracking and persistence
+- Intelligent sudo session management with auto-detection
 - Theme customization support
 - Configuration validation and linting
 - Command-line utilities for scripting integration
@@ -100,6 +101,7 @@ Configuration files are stored in `~/.config/nwiz/`:
 [menu]
 title = "Main Menu"
 description = "System management"
+sudo_refresh_period = 240  # Auto-detects system sudo timeout if omitted
 
 [menu.install]
 type = "submenu"

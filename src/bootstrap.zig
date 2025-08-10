@@ -64,10 +64,8 @@ pub fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_f
     
     const theme_toml_path = try std.fmt.allocPrint(allocator, "{s}/theme.toml", .{config_dir_allocated});
     
-    std.fs.cwd().access(theme_toml_path, .{}) catch {
-        std.debug.print("Warning: Theme configuration file not found: {s}/theme.toml\n", .{config_dir_allocated});
-        std.debug.print("Using default theme colors.\n", .{});
-    };
+    // Check if theme.toml exists (silent check)
+    std.fs.cwd().access(theme_toml_path, .{}) catch {};
     
     const install_dir = custom_install_config_dir orelse config_dir_allocated;
     const install_toml_path = try std.fmt.allocPrint(allocator, "{s}/install.toml", .{install_dir});
@@ -84,10 +82,8 @@ pub fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_f
         };
     }
     
-    std.fs.cwd().access(install_toml_path, .{}) catch {
-        std.debug.print("Info: Install configuration file not found: {s}/install.toml\n", .{install_dir});
-        std.debug.print("Will be created with default values from menu configuration.\n", .{});
-    };
+    // Check if install.toml exists (silent check)
+    std.fs.cwd().access(install_toml_path, .{}) catch {};
     
     // Free the temporary config directory path since all dependent paths have been allocated
     allocator.free(config_dir_allocated);

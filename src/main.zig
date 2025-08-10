@@ -104,9 +104,8 @@ pub fn main() !void {
         return;
     }
 
-    // Set up signal handlers and authentication
+    // Set up signal handlers
     try setupSignalHandlers();
-    try handleAuthentication(&app_config);
 
     // Validate configuration and start TUI
     try validateAndStartTUI(allocator, &app_config, &err_handler);
@@ -148,9 +147,11 @@ fn setupSignalHandlers() !void {
     _ = std.posix.sigaction(std.posix.SIG.TERM, &sig_action, null);
 }
 
-fn handleAuthentication(app_config: *const cli.AppConfig) !void {
-    // Authenticate sudo BEFORE TUI initialization (if enabled)
+fn handleAuthentication(app_config: *const cli.AppConfig, menu_config: *const menu.MenuConfig) !void {
+    // Configure sudo refresh period before authentication
     if (app_config.use_sudo) {
+        sudo.configureRefreshPeriod(menu_config.sudo_refresh_period);
+        
         const auth_success = sudo.authenticateInitial() catch |err| {
             error_handler.handleGlobalError(err, .authentication, "Failed to initialize sudo authentication");
             return err;
@@ -192,6 +193,9 @@ fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppC
     // Load configurations
     var configs = try app_init.loadConfigurations(allocator, app_config.*);
     defer configs.deinit(allocator);
+
+    // Handle authentication after configurations are loaded
+    try handleAuthentication(app_config, &configs.menu_config);
 
     // Initialize session logging
     const log_file_path = determineLogFilePath(app_config, &configs.menu_config);
