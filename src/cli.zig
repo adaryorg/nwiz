@@ -17,6 +17,7 @@ pub const AppConfig = struct {
     show_theme_name: ?[]const u8 = null,
     list_themes: bool = false,
     log_file_path: ?[]const u8 = null,
+    debug_file_path: ?[]const u8 = null,
 };
 
 pub fn printVersion() void {
@@ -49,6 +50,7 @@ pub fn printHelp() void {
     std.debug.print("      --write-theme <PATH>           Export theme to TOML file and exit\n", .{});
     std.debug.print("      --config-options <PATH>        Export install.toml as NWIZ_* variables\n", .{});
     std.debug.print("      --log-file <PATH>              Specify log file path (default: nwiz-log.txt)\n", .{});
+    std.debug.print("      --debug [PATH]                 Enable debug logging (default: nwiz-debug.log)\n", .{});
     std.debug.print("\n", .{});
 }
 
@@ -273,6 +275,15 @@ pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
                 return app_config;
             }
             app_config.log_file_path = try allocator.dupe(u8, args[i]);
+        } else if (std.mem.eql(u8, arg, "--debug")) {
+            // Check if next argument exists and is not another flag
+            if (i + 1 < args.len and !std.mem.startsWith(u8, args[i + 1], "--")) {
+                i += 1;
+                app_config.debug_file_path = try allocator.dupe(u8, args[i]);
+            } else {
+                // Use default debug file name
+                app_config.debug_file_path = try allocator.dupe(u8, "nwiz-debug.log");
+            }
         } else {
             std.debug.print("Error: Unknown argument '{s}'\n", .{arg});
             std.debug.print("Use --help for usage information\n", .{});
@@ -308,5 +319,8 @@ pub fn deinitAppConfig(allocator: std.mem.Allocator, app_config: *const AppConfi
     }
     if (app_config.log_file_path) |log_file_path| {
         allocator.free(log_file_path);
+    }
+    if (app_config.debug_file_path) |debug_file_path| {
+        allocator.free(debug_file_path);
     }
 }

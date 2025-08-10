@@ -108,11 +108,7 @@ fn handleMultipleSelectionModeKeyPress(key: vaxis.Key, context: *EventContext) !
     } else if (key.matches(vaxis.Key.enter, .{})) {
         context.menu_state.exitMultipleSelectionMode();
         
-        // Save to install.toml if multiple selection has install_key
-        if (context.menu_state.selected_index < context.menu_state.current_items.len) {
-            const current_item = &context.menu_state.current_items[context.menu_state.selected_index];
-            try install_integration.saveMultipleSelectionToInstallConfig(context.allocator(), current_item, context.menu_state, context.install_config, context.install_config_path);
-        }
+        // Note: Removed runtime save - will save on application exit only
     } else if (key.matches(vaxis.Key.escape, .{})) {
         context.menu_state.exitMultipleSelectionMode();
     }
@@ -130,11 +126,7 @@ fn handleSelectorModeKeyPress(key: vaxis.Key, context: *EventContext) !EventResu
             std.debug.print("Failed to select option: {}\n", .{err});
         };
         
-        // Save to install.toml if selector has install_key
-        if (context.menu_state.selected_index < context.menu_state.current_items.len) {
-            const current_item = &context.menu_state.current_items[context.menu_state.selected_index];
-            try install_integration.saveSingleSelectionToInstallConfig(context.allocator(), current_item, context.menu_state, context.install_config, context.install_config_path);
-        }
+        // Note: Removed runtime save - will save on application exit only
     } else if (key.matches(vaxis.Key.escape, .{})) {
         context.menu_state.exitSelectorMode();
     }

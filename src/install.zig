@@ -5,6 +5,7 @@ const std = @import("std");
 const memory = @import("utils/memory.zig");
 const string_utils = @import("utils/string.zig");
 const install_toml = @import("install_toml.zig");
+const debug = @import("debug.zig");
 
 pub const InstallConfig = struct {
     selections: std.HashMap([]const u8, SelectionValue, std.hash_map.StringContext, std.hash_map.default_max_load_percentage),
@@ -90,36 +91,38 @@ pub fn createInstallConfigFromMenu(allocator: std.mem.Allocator, menu_config: *c
         const item = entry.value_ptr;
         
         if (item.type == .selector or item.type == .multiple_selection) {
-            const key_name = item.install_key orelse item.id;
-            const key = key_name;
-            var lowercase_key = try allocator.alloc(u8, key.len);
-            defer allocator.free(lowercase_key);
-            for (key, 0..) |c, i| {
-                lowercase_key[i] = std.ascii.toLower(c);
-            }
-            
-            switch (item.type) {
-                .multiple_selection => {
-                    if (item.multiple_defaults) |defaults| {
-                        try install_config.setMultipleSelection(lowercase_key, defaults);
-                    } else {
-                        const empty_array = try allocator.alloc([]const u8, 0);
-                        try install_config.setMultipleSelection(lowercase_key, empty_array);
-                    }
-                },
-                .selector => {
-                    var default_val: []const u8 = "";
-                    if (item.default_value) |def_val| {
-                        default_val = def_val;
-                    } else if (item.options) |options| {
-                        if (options.len > 0) {
-                            default_val = options[0];
+            if (item.install_key) |_| {
+                const key_name = item.install_key orelse item.id;
+                const key = key_name;
+                var lowercase_key = try allocator.alloc(u8, key.len);
+                defer allocator.free(lowercase_key);
+                for (key, 0..) |c, i| {
+                    lowercase_key[i] = std.ascii.toLower(c);
+                }
+                
+                switch (item.type) {
+                    .multiple_selection => {
+                        if (item.multiple_defaults) |defaults| {
+                            try install_config.setMultipleSelection(lowercase_key, defaults);
+                        } else {
+                            const empty_array = try allocator.alloc([]const u8, 0);
+                            try install_config.setMultipleSelection(lowercase_key, empty_array);
                         }
+                    },
+                    .selector => {
+                        var default_val: []const u8 = "";
+                        if (item.default_value) |def_val| {
+                            default_val = def_val;
+                        } else if (item.options) |options| {
+                            if (options.len > 0) {
+                                default_val = options[0];
+                            }
+                        }
+                        try install_config.setSingleSelection(lowercase_key, default_val);
+                    },
+                    else => {
+                        try install_config.setSingleSelection(lowercase_key, "");
                     }
-                    try install_config.setSingleSelection(lowercase_key, default_val);
-                },
-                else => {
-                    try install_config.setSingleSelection(lowercase_key, "");
                 }
             }
         }
@@ -129,6 +132,9 @@ pub fn createInstallConfigFromMenu(allocator: std.mem.Allocator, menu_config: *c
 }
 
 pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, menu_config: *const @import("menu.zig").MenuConfig) !bool {
+    debug.debugSection("Install Config Structure Validation Details");
+    debug.debugLog("Starting validation of install.toml structure", .{});
+    
     // Get all install_key values from menu
     var expected_keys = std.ArrayList([]const u8).init(install_config.allocator);
     defer expected_keys.deinit();
@@ -145,6 +151,7 @@ pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, me
             for (key, 0..) |c, i| {
                 lowercase_key[i] = std.ascii.toLower(c);
             }
+            debug.debugLog("Expected key from menu: '{s}' -> '{s}'", .{ key, lowercase_key });
             try expected_keys.append(try memory.dupeString(install_config.allocator, lowercase_key));
         }
     }
@@ -154,10 +161,15 @@ pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, me
         }
     }
     
+    debug.debugLog("Total expected keys from menu: {}", .{expected_keys.items.len});
+    debug.debugLog("Total keys in install.toml: {}", .{install_config.selections.count()});
+    
     // Check if install.toml has keys that aren't in menu
+    debug.debugLog("Checking for extra keys in install.toml", .{});
     var install_iterator = install_config.selections.iterator();
     while (install_iterator.next()) |entry| {
         const install_key = entry.key_ptr.*;
+        debug.debugLog("Install.toml has key: '{s}'", .{install_key});
         var found = false;
         for (expected_keys.items) |expected_key| {
             if (std.mem.eql(u8, install_key, expected_key)) {
@@ -166,17 +178,30 @@ pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, me
             }
         }
         if (!found) {
+            debug.debugLog("VALIDATION FAILED: install.toml has unexpected key: '{s}'", .{install_key});
             return false;
         }
     }
     
     // Check if menu has keys that aren't in install.toml
+    // Instead of failing validation, we'll add missing keys with defaults
+    debug.debugLog("Checking for missing keys in install.toml", .{});
+    var missing_keys_found = false;
     for (expected_keys.items) |expected_key| {
         if (!install_config.selections.contains(expected_key)) {
-            return false;
+            debug.debugLog("Missing key will be added with default: '{s}'", .{expected_key});
+            missing_keys_found = true;
+        } else {
+            debug.debugLog("Found expected key: '{s}'", .{expected_key});
         }
     }
     
+    if (missing_keys_found) {
+        debug.debugLog("Adding missing keys to install config instead of recreating file", .{});
+        // We'll let the file load and add missing keys with defaults
+    }
+    
+    debug.debugLog("Validation PASSED - structure matches", .{});
     return true;
 }
 

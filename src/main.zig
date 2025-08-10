@@ -23,9 +23,21 @@ const disclaimer = @import("disclaimer.zig");
 const app_context = @import("app_context.zig");
 const error_handler = @import("error_handler.zig");
 const session_logger = @import("session_logger.zig");
+const debug = @import("debug.zig");
+
+// Suppress vaxis info logging messages  
+pub const std_options: std.Options = .{
+    .log_level = .warn, // Only show warnings and errors, suppress info messages
+};
 
 var global_async_executor: ?*executor.AsyncCommandExecutor = null;
 pub var global_shell_pid: ?std.posix.pid_t = null;
+
+// Global references for signal handler save-on-exit
+var global_menu_state: ?*menu.MenuState = null;
+var global_menu_config: ?*menu.MenuConfig = null;
+var global_install_config_path: ?[]const u8 = null;
+var global_allocator: ?std.mem.Allocator = null;
 
 pub fn panic(message: []const u8, stack_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     _ = stack_trace;
@@ -45,6 +57,22 @@ pub fn panic(message: []const u8, stack_trace: ?*std.builtin.StackTrace, ret_add
 
 fn signalHandler(sig: c_int) callconv(.C) void {
     _ = sig;
+    
+    // Save MenuState before exit if possible
+    if (global_menu_state) |menu_state| {
+        if (global_menu_config) |menu_config| {
+            if (global_install_config_path) |install_path| {
+                if (global_allocator) |allocator| {
+                    install_integration.saveMenuStateToInstallConfig(
+                        allocator, 
+                        menu_state, 
+                        menu_config, 
+                        install_path
+                    ) catch {}; // Ignore errors during signal handling
+                }
+            }
+        }
+    }
     
     // If there's a running shell wrapper, kill it directly
     if (global_shell_pid) |shell_pid| {
@@ -190,9 +218,29 @@ fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppC
         return;
     }
 
+    // Initialize debug logging BEFORE configuration loading
+    if (app_config.debug_file_path) |debug_path| {
+        debug.initDebugLogging(debug_path) catch |err| {
+            std.debug.print("Failed to initialize debug logging to '{s}': {}\n", .{ debug_path, err });
+        };
+        debug.debugLog("Debug logging initialized successfully", .{});
+        debug.debugSection("Starting Configuration Loading");
+    }
+    
     // Load configurations
     var configs = try app_init.loadConfigurations(allocator, app_config.*);
     defer configs.deinit(allocator);
+
+    // Log configuration loading completion
+    if (app_config.debug_file_path) |_| {
+        debug.debugSection("Configuration Loading Complete");
+        debug.debugLog("Menu config loaded with {} items", .{configs.menu_config.items.count()});
+    }
+    defer {
+        if (app_config.debug_file_path != null) {
+            debug.deinitDebugLogging();
+        }
+    }
 
     // Handle authentication after configurations are loaded
     try handleAuthentication(app_config, &configs.menu_config);
@@ -215,6 +263,7 @@ fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppC
         }
         session_logger.deinitGlobalLogger(allocator);
     }
+
 
     // Initialize and run TUI
     try initializeAndRunTUI(allocator, &configs, app_config, err_handler);
@@ -294,7 +343,7 @@ fn runMainApplication(
     err_handler: *const error_handler.ErrorHandler
 ) !void {
     // Extract references for easier access
-    var install_config = configs.install_config;
+    // Note: install_config now only used for runtime saving, not loading
     const install_config_path = configs.install_config_path;
     const app_theme = &configs.app_theme;
 
@@ -313,6 +362,18 @@ fn runMainApplication(
         }
     }
 
+    // Set global references for signal handler save-on-exit
+    global_menu_state = &application_state.menu_state;
+    global_menu_config = @constCast(&configs.menu_config);
+    global_install_config_path = install_config_path;
+    global_allocator = allocator;
+    defer {
+        global_menu_state = null;
+        global_menu_config = null;
+        global_install_config_path = null;
+        global_allocator = null;
+    }
+
     // Set up event context
     var event_context = event_handler.EventContext{
         .context = &app_ctx,
@@ -320,7 +381,7 @@ fn runMainApplication(
         .menu_state = &application_state.menu_state,
         .async_output_viewer = &application_state.async_output_viewer,
         .async_command_executor = &application_state.async_command_executor,
-        .install_config = &install_config,
+        .install_config = @constCast(&configs.install_config),
         .install_config_path = install_config_path,
         .vx = vx,
         .global_shell_pid = &global_shell_pid,
@@ -330,6 +391,19 @@ fn runMainApplication(
 
     // Run the main event and render loop
     try runMainLoop(allocator, vx, tty, loop, &event_context, &application_state);
+
+    // Save current MenuState values to install.toml before exit
+    install_integration.saveMenuStateToInstallConfig(
+        allocator, 
+        &application_state.menu_state, 
+        &configs.menu_config, 
+        configs.install_config_path
+    ) catch |err| {
+        // Don't fail application exit if save fails
+        if (app_config.debug_file_path != null) {
+            debug.debugLog("Failed to save MenuState on exit: {}", .{err});
+        }
+    };
 
     // Comprehensive terminal restoration on normal exit
     terminal.restoreTerminalCompletely();
@@ -346,14 +420,13 @@ const ApplicationState = struct {
 
 fn initializeApplicationState(allocator: std.mem.Allocator, configs: *const app_init.ConfigurationResult, app_ctx: *const app_context.AppContext) !ApplicationState {
     const menu_config = &configs.menu_config;
-    var install_config = configs.install_config;
     
     var menu_state = menu.MenuState.init(allocator, menu_config, configs.menu_config_path) catch {
         return error.MenuStateInitFailed;
     };
     
-    // Load existing selections from install.toml into menu state
-    try install_integration.loadInstallSelectionsIntoMenuState(allocator, &menu_state, &install_config, menu_config);
+    // Load existing selections from install.toml into menu state (new direct approach)
+    try install_integration.loadInstallSelectionsIntoMenuStateNew(allocator, &menu_state, configs.install_config_path, menu_config);
 
     // Initialize menu renderer
     const menu_renderer = menu.MenuRenderer{ 

@@ -66,9 +66,6 @@ const SudoManager = struct {
         self.config_override = seconds;
         if (seconds) |s| {
             self.refresh_period_seconds = s;
-            if (!builtin.is_test) {
-                std.debug.print("Sudo refresh period: {} seconds (from menu.toml)\n", .{s});
-            }
         }
     }
     
@@ -89,14 +86,7 @@ const SudoManager = struct {
             self.refresh_period_seconds = @max(30, @min(3600, seconds));
             self.detected_timeout = self.refresh_period_seconds;
             
-            if (!builtin.is_test) {
-                std.debug.print("Sudo timeout detected: {} minutes (from sudoers)\n", .{minutes});
-                std.debug.print("Sudo refresh period: {} seconds (auto-detected: {}min - 20s)\n", .{ self.refresh_period_seconds, minutes });
-            }
         } else {
-            if (!builtin.is_test) {
-                std.debug.print("Sudo refresh period: {} seconds (default - no sudoers timeout found)\n", .{self.refresh_period_seconds});
-            }
         }
     }
     
@@ -213,13 +203,12 @@ pub fn configureRefreshPeriod(seconds: ?u32) void {
 }
 
 pub fn authenticateInitial() !bool {
-    std.debug.print("nwiz requires sudo access for system commands.\n", .{});
+    std.debug.print("nwiz requires sudo access\n", .{});
     
     const allocator = std.heap.page_allocator;
     const success = sudo_manager.authenticate(allocator) catch false;
     
     if (success) {
-        std.debug.print("Sudo authenticated successfully! Starting TUI...\n", .{});
         
         // Auto-detect sudo timeout from system if no config override
         sudo_manager.detectSystemTimeout(allocator);
