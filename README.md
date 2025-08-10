@@ -22,10 +22,50 @@ A terminal-based installation wizard for the Nocturne desktop environment ecosys
 
 ### From Release
 
+**Linux x64:**
 ```bash
-wget https://github.com/adaryorg/nwiz/releases/latest/download/nwiz
-chmod +x nwiz
-sudo mv nwiz /usr/local/bin/
+mkdir -p ~/.local/bin
+curl -L https://github.com/adaryorg/nwiz/releases/latest/download/nwiz-linux-x64 -o ~/.local/bin/nwiz
+chmod +x ~/.local/bin/nwiz
+```
+
+**macOS x64:**
+```bash
+mkdir -p ~/.local/bin
+curl -L https://github.com/adaryorg/nwiz/releases/latest/download/nwiz-macos-x64 -o ~/.local/bin/nwiz
+chmod +x ~/.local/bin/nwiz
+```
+
+**macOS ARM64 (Apple Silicon):**
+```bash
+mkdir -p ~/.local/bin
+curl -L https://github.com/adaryorg/nwiz/releases/latest/download/nwiz-macos-arm64 -o ~/.local/bin/nwiz
+chmod +x ~/.local/bin/nwiz
+```
+
+**Add to PATH:**
+
+**Bash:**
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Zsh:**
+```zsh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Fish:**
+```fish
+fish_add_path ~/.local/bin
+```
+
+**Nushell:**
+```nu
+$env.PATH = ($env.PATH | split row (char esep) | prepend ($env.HOME | path join .local bin))
+echo '$env.PATH = ($env.PATH | split row (char esep) | prepend ($env.HOME | path join .local bin))' | save --append ~/.config/nushell/env.nu
 ```
 
 ### From Source
