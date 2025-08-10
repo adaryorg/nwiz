@@ -4,6 +4,7 @@
 const std = @import("std");
 const theme = @import("theme.zig");
 const build_options = @import("build_options");
+const file_validation = @import("utils/file_validation.zig");
 
 pub const AppConfig = struct {
     should_continue: bool = true,
@@ -18,6 +19,8 @@ pub const AppConfig = struct {
     list_themes: bool = false,
     log_file_path: ?[]const u8 = null,
     debug_file_path: ?[]const u8 = null,
+    batch_mode: bool = false,
+    answer_file: ?[]const u8 = null,
 };
 
 pub fn printVersion() void {
@@ -51,6 +54,11 @@ pub fn printHelp() void {
     std.debug.print("      --config-options <PATH>        Export install.toml as NWIZ_* variables\n", .{});
     std.debug.print("      --log-file <PATH>              Specify log file path (default: nwiz-log.txt)\n", .{});
     std.debug.print("      --debug [PATH]                 Enable debug logging (default: nwiz-debug.log)\n", .{});
+    std.debug.print("\n", .{});
+    
+    std.debug.print("BATCH MODE:\n", .{});
+    std.debug.print("      --batch                        Run all actions in batch mode\n", .{});
+    std.debug.print("      --answer-file <PATH>           Use TOML answer file (requires --batch)\n", .{});
     std.debug.print("\n", .{});
 }
 
@@ -284,12 +292,40 @@ pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
                 // Use default debug file name
                 app_config.debug_file_path = try allocator.dupe(u8, "nwiz-debug.log");
             }
+        } else if (std.mem.eql(u8, arg, "--batch")) {
+            app_config.batch_mode = true;
+        } else if (std.mem.eql(u8, arg, "--answer-file")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --answer-file requires a file path\n", .{});
+                app_config.should_continue = false;
+                return app_config;
+            }
+            app_config.answer_file = try allocator.dupe(u8, args[i]);
         } else {
             std.debug.print("Error: Unknown argument '{s}'\n", .{arg});
             std.debug.print("Use --help for usage information\n", .{});
             app_config.should_continue = false;
             return app_config;
         }
+    }
+
+    // Post-processing validation and logic
+    // 1. Handle --answer-file behavior
+    if (app_config.answer_file != null and !app_config.batch_mode) {
+        // Silently ignore --answer-file if --batch not present
+        if (app_config.answer_file) |answer_file| {
+            allocator.free(answer_file);
+        }
+        app_config.answer_file = null;
+    }
+    
+    // 2. Validate answer file exists if specified
+    if (app_config.answer_file) |answer_file_path| {
+        file_validation.validateFileForCLI(answer_file_path, "Answer") catch {
+            app_config.should_continue = false;
+            return app_config;
+        };
     }
 
     return app_config;
@@ -322,5 +358,8 @@ pub fn deinitAppConfig(allocator: std.mem.Allocator, app_config: *const AppConfi
     }
     if (app_config.debug_file_path) |debug_file_path| {
         allocator.free(debug_file_path);
+    }
+    if (app_config.answer_file) |answer_file| {
+        allocator.free(answer_file);
     }
 }

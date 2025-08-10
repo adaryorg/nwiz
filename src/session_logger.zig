@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+const debug = @import("debug.zig");
 
 pub const SessionLogger = struct {
     allocator: std.mem.Allocator,
@@ -31,27 +32,27 @@ pub const SessionLogger = struct {
         self.log_file = std.fs.cwd().createFile(self.log_file_path, .{ .truncate = false }) catch |err| switch (err) {
             error.AccessDenied => {
                 if (!builtin.is_test) {
-                    std.debug.print("Error: Cannot write to log file '{s}' - Access denied\n", .{self.log_file_path});
-                    std.debug.print("Please check file permissions or choose a different log file location.\n", .{});
+                    debug.debugLog("Error: Cannot write to log file '{s}' - Access denied", .{self.log_file_path});
+                    debug.debugLog("Please check file permissions or choose a different log file location.", .{});
                 }
                 return err;
             },
             error.IsDir => {
                 if (!builtin.is_test) {
-                    std.debug.print("Error: Log file path '{s}' is a directory\n", .{self.log_file_path});
-                    std.debug.print("Please specify a file path for the log file.\n", .{});
+                    debug.debugLog("Error: Log file path '{s}' is a directory", .{self.log_file_path});
+                    debug.debugLog("Please specify a file path for the log file.", .{});
                 }
                 return err;
             },
             error.NoSpaceLeft => {
                 if (!builtin.is_test) {
-                    std.debug.print("Error: No disk space available to create log file '{s}'\n", .{self.log_file_path});
+                    debug.debugLog("Error: No disk space available to create log file '{s}'", .{self.log_file_path});
                 }
                 return err;
             },
             else => {
                 if (!builtin.is_test) {
-                    std.debug.print("Error: Failed to create log file '{s}': {}\n", .{ self.log_file_path, err });
+                    debug.debugLog("Error: Failed to create log file '{s}': {}", .{ self.log_file_path, err });
                 }
                 return err;
             },
@@ -149,27 +150,27 @@ pub const SessionLogger = struct {
         const file = std.fs.cwd().createFile(log_file_path, .{ .truncate = false }) catch |err| switch (err) {
             error.AccessDenied => {
                 if (!builtin.is_test) {
-                    std.debug.print("Error: Cannot write to log file '{s}' - Access denied\n", .{log_file_path});
-                    std.debug.print("Please check file permissions or choose a different log file location.\n", .{});
+                    debug.debugLog("Error: Cannot write to log file '{s}' - Access denied", .{log_file_path});
+                    debug.debugLog("Please check file permissions or choose a different log file location.", .{});
                 }
                 return err;
             },
             error.IsDir => {
                 if (!builtin.is_test) {
-                    std.debug.print("Error: Log file path '{s}' is a directory\n", .{log_file_path});
-                    std.debug.print("Please specify a file path for the log file.\n", .{});
+                    debug.debugLog("Error: Log file path '{s}' is a directory", .{log_file_path});
+                    debug.debugLog("Please specify a file path for the log file.", .{});
                 }
                 return err;
             },
             error.NoSpaceLeft => {
                 if (!builtin.is_test) {
-                    std.debug.print("Error: No disk space available to create log file '{s}'\n", .{log_file_path});
+                    debug.debugLog("Error: No disk space available to create log file '{s}'", .{log_file_path});
                 }
                 return err;
             },
             else => {
                 if (!builtin.is_test) {
-                    std.debug.print("Error: Failed to create log file '{s}': {}\n", .{ log_file_path, err });
+                    debug.debugLog("Error: Failed to create log file '{s}': {}", .{ log_file_path, err });
                 }
                 return err;
             },
@@ -180,7 +181,7 @@ pub const SessionLogger = struct {
         const writer = file.writer();
         const test_message = "nwiz log file test - this line will be removed\n";
         writer.writeAll(test_message) catch |err| {
-            std.debug.print("Error: Cannot write to log file '{s}': {}\n", .{ log_file_path, err });
+            debug.debugLog("Error: Cannot write to log file '{s}': {}", .{ log_file_path, err });
             return err;
         };
         
@@ -285,7 +286,7 @@ pub fn deinitGlobalLogger(allocator: std.mem.Allocator) void {
 pub fn logGlobalCommand(command: []const u8, menu_item_name: []const u8, output: []const u8, error_output: []const u8, exit_code: u8) void {
     if (global_session_logger) |logger| {
         logger.logCommand(command, menu_item_name, output, error_output, exit_code) catch |err| {
-            std.debug.print("Warning: Failed to write to log file: {}\n", .{err});
+            debug.debugLog("Warning: Failed to write to log file: {}", .{err});
         };
     }
 }
@@ -294,7 +295,7 @@ pub fn logGlobalCommand(command: []const u8, menu_item_name: []const u8, output:
 pub fn logGlobalMessage(message: []const u8) void {
     if (global_session_logger) |logger| {
         logger.logMessage(message) catch |err| {
-            std.debug.print("Warning: Failed to write to log file: {}\n", .{err});
+            debug.debugLog("Warning: Failed to write to log file: {}", .{err});
         };
     }
 }

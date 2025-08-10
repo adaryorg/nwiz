@@ -13,6 +13,7 @@ A terminal-based installation wizard for the Nocturne desktop environment ecosys
 - Real-time command execution with live output
 - Installation state tracking and persistence
 - Intelligent sudo session management with auto-detection
+- Batch mode for automated execution with answer files
 - Theme customization support
 - Configuration validation and linting
 - Command-line utilities for scripting integration
@@ -75,6 +76,20 @@ nwiz --show-themes
 # Export theme to file
 nwiz --theme rainbow --write-theme my-theme.toml
 ```
+
+### Batch Mode
+
+Execute all menu actions automatically using answer files:
+
+```bash
+# Run batch mode with pre-configured answers
+nwiz --batch --answer-file answers.toml
+
+# Run batch mode with default sequence (all actions)
+nwiz --batch
+```
+
+See [USER_GUIDE.md](USER_GUIDE.md) for detailed batch mode configuration.
 
 ### Navigation
 

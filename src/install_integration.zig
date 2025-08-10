@@ -116,7 +116,7 @@ fn loadInstallTomlValuesDirectly(allocator: std.mem.Allocator, file_path: []cons
     defer parser.deinit();
     
     var toml_result = parser.parseString(file_content) catch |err| {
-        std.debug.print("Failed to parse install TOML: {}\n", .{err});
+        debug.debugLog("Failed to parse install TOML: {}", .{err});
         return values; // Return empty map on parse error
     };
     defer toml_result.deinit();
@@ -215,16 +215,40 @@ fn applyInstallValuesToMenuState(
                         switch (value) {
                             .single => |val| {
                                 debug.debugLog("Applying selector value: '{s}' = '{s}'", .{ item.id, val });
-                                // Use proper memory management pattern
-                                const new_value = try allocator.dupe(u8, val);
-                                const result = menu_state.selector_values.getOrPut(item.id) catch continue;
-                                if (result.found_existing) {
-                                    allocator.free(result.value_ptr.*);
-                                    result.value_ptr.* = new_value;
+                                
+                                // Check if key already exists
+                                if (menu_state.selector_values.getPtr(item.id)) |existing_value_ptr| {
+                                    debug.debugLog("SELECTOR: Key '{s}' already exists, replacing value", .{item.id});
+                                    // Key exists, free old value and replace with new value
+                                    debug.debugLog("SELECTOR: Freeing old value: '{s}'", .{existing_value_ptr.*});
+                                    allocator.free(existing_value_ptr.*);
+                                    existing_value_ptr.* = allocator.dupe(u8, val) catch {
+                                        debug.debugLog("SELECTOR: Failed to dupe replacement value for '{s}'", .{item.id});
+                                        continue;
+                                    };
+                                    debug.debugLog("SELECTOR: Successfully replaced value for key '{s}'", .{item.id});
                                 } else {
-                                    const key_copy = try allocator.dupe(u8, item.id);
-                                    result.key_ptr.* = key_copy;
-                                    result.value_ptr.* = new_value;
+                                    debug.debugLog("SELECTOR: Key '{s}' doesn't exist, creating new entry", .{item.id});
+                                    // Key doesn't exist, create new entry
+                                    const key_copy = allocator.dupe(u8, item.id) catch {
+                                        debug.debugLog("SELECTOR: Failed to dupe key '{s}'", .{item.id});
+                                        continue;
+                                    };
+                                    debug.debugLog("SELECTOR: Duped key '{s}', now duping value", .{item.id});
+                                    const new_value = allocator.dupe(u8, val) catch {
+                                        debug.debugLog("SELECTOR: Failed to dupe value for key '{s}', freeing key", .{item.id});
+                                        allocator.free(key_copy);
+                                        continue;
+                                    };
+                                    debug.debugLog("SELECTOR: Duped both key and value, now putting in HashMap", .{});
+                                    menu_state.selector_values.put(key_copy, new_value) catch {
+                                        debug.debugLog("SELECTOR: Failed to put in HashMap, cleaning up key '{s}' and value", .{item.id});
+                                        // If put fails, clean up both allocations
+                                        allocator.free(key_copy);
+                                        allocator.free(new_value);
+                                        continue;
+                                    };
+                                    debug.debugLog("SELECTOR: Successfully added new entry for key '{s}'", .{item.id});
                                 }
                             },
                             .multiple => {
@@ -241,24 +265,77 @@ fn applyInstallValuesToMenuState(
                                     debug.debugLog("  [{}]: '{s}'", .{ i, val });
                                 }
                                 
-                                // Clear existing selections
+                                // Check if key already exists
+                                debug.debugLog("MULTI: Processing key '{s}' with {} values", .{item.id, vals.len});
                                 if (menu_state.multiple_selection_values.getPtr(item.id)) |existing_list| {
+                                    debug.debugLog("MULTI: Key '{s}' already exists with {} items, clearing", .{item.id, existing_list.items.len});
+                                    // Key exists, clear existing values and add new ones
                                     for (existing_list.items) |existing_val| {
                                         allocator.free(existing_val);
                                     }
-                                    existing_list.clearAndFree();
-                                } else {
-                                    const item_id_key = try allocator.dupe(u8, item.id);
-                                    const new_list = std.ArrayList([]const u8).init(allocator);
-                                    try menu_state.multiple_selection_values.put(item_id_key, new_list);
-                                }
-                                
-                                // Add loaded values
-                                if (menu_state.multiple_selection_values.getPtr(item.id)) |selection_list| {
-                                    for (vals) |val| {
-                                        const val_copy = try allocator.dupe(u8, val);
-                                        try selection_list.append(val_copy);
+                                    existing_list.clearRetainingCapacity();
+                                    debug.debugLog("MULTI: Cleared existing list for key '{s}'", .{item.id});
+                                    
+                                    // Add new values to existing list
+                                    for (vals, 0..) |val, idx| {
+                                        debug.debugLog("MULTI: Duping value [{}]: '{s}'", .{idx, val});
+                                        if (allocator.dupe(u8, val)) |val_copy| {
+                                            debug.debugLog("MULTI: Successfully duped value [{}], appending to list", .{idx});
+                                            existing_list.append(val_copy) catch {
+                                                debug.debugLog("MULTI: Failed to append value [{}], freeing copy", .{idx});
+                                                // If append fails, free the allocated copy
+                                                allocator.free(val_copy);
+                                                continue;
+                                            };
+                                            debug.debugLog("MULTI: Successfully appended value [{}]", .{idx});
+                                        } else |_| {
+                                            debug.debugLog("MULTI: Failed to dupe value [{}]", .{idx});
+                                            // dupe failed, continue to next value
+                                            continue;
+                                        }
                                     }
+                                    debug.debugLog("MULTI: Finished updating existing key '{s}', final list size: {}", .{item.id, existing_list.items.len});
+                                } else {
+                                    debug.debugLog("MULTI: Key '{s}' doesn't exist, creating new entry", .{item.id});
+                                    // Key doesn't exist, create new entry
+                                    const key_copy = allocator.dupe(u8, item.id) catch {
+                                        debug.debugLog("MULTI: Failed to dupe key '{s}'", .{item.id});
+                                        continue;
+                                    };
+                                    debug.debugLog("MULTI: Successfully duped key '{s}'", .{item.id});
+                                    var new_list = std.ArrayList([]const u8).init(allocator);
+                                    
+                                    // Add values to new list
+                                    for (vals, 0..) |val, idx| {
+                                        debug.debugLog("MULTI: Duping new value [{}]: '{s}'", .{idx, val});
+                                        if (allocator.dupe(u8, val)) |val_copy| {
+                                            debug.debugLog("MULTI: Successfully duped new value [{}], appending", .{idx});
+                                            new_list.append(val_copy) catch {
+                                                debug.debugLog("MULTI: Failed to append new value [{}], freeing copy", .{idx});
+                                                // If append fails, free the allocated copy
+                                                allocator.free(val_copy);
+                                                continue;
+                                            };
+                                            debug.debugLog("MULTI: Successfully appended new value [{}]", .{idx});
+                                        } else |_| {
+                                            debug.debugLog("MULTI: Failed to dupe new value [{}]", .{idx});
+                                            // dupe failed, continue to next value
+                                            continue;
+                                        }
+                                    }
+                                    debug.debugLog("MULTI: Finished populating new list for key '{s}', size: {}", .{item.id, new_list.items.len});
+                                    
+                                    menu_state.multiple_selection_values.put(key_copy, new_list) catch {
+                                        debug.debugLog("MULTI: Failed to put new list in HashMap, cleaning up key '{s}'", .{item.id});
+                                        // If put fails, clean up all allocated memory
+                                        allocator.free(key_copy);
+                                        for (new_list.items) |item_val| {
+                                            allocator.free(item_val);
+                                        }
+                                        new_list.deinit();
+                                        continue;
+                                    };
+                                    debug.debugLog("MULTI: Successfully added new entry for key '{s}'", .{item.id});
                                 }
                             },
                             .single => {

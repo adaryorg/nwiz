@@ -236,30 +236,48 @@ pub const MenuState = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        const debug = @import("debug.zig");
+        debug.debugSection("MenuState Cleanup Starting");
+        debug.debugLog("MenuState deinit called", .{});
+        
         self.menu_stack.deinit();
+        debug.debugLog("Menu stack cleaned up", .{});
         
         // Always free current_items as it's allocated in init
         self.allocator.free(self.current_items);
+        debug.debugLog("Current items freed", .{});
         
         // Free selector values
+        debug.debugLog("Starting selector values cleanup - {} entries", .{self.selector_values.count()});
         var iter = self.selector_values.iterator();
+        var selector_count: u32 = 0;
         while (iter.next()) |entry| {
+            debug.debugLog("CLEANUP SELECTOR [{}]: key='{s}', value='{s}'", .{selector_count, entry.key_ptr.*, entry.value_ptr.*});
             self.allocator.free(entry.key_ptr.*);
             self.allocator.free(entry.value_ptr.*);
+            selector_count += 1;
         }
         self.selector_values.deinit();
+        debug.debugLog("Selector values cleanup complete - freed {} entries", .{selector_count});
         
         // Free multiple selection values
+        debug.debugLog("Starting multiple selection values cleanup - {} entries", .{self.multiple_selection_values.count()});
         var multi_iter = self.multiple_selection_values.iterator();
+        var multi_count: u32 = 0;
         while (multi_iter.next()) |entry| {
+            debug.debugLog("CLEANUP MULTI [{}]: key='{s}', {} values", .{multi_count, entry.key_ptr.*, entry.value_ptr.items.len});
             self.allocator.free(entry.key_ptr.*);
             // Free each string in the ArrayList
-            for (entry.value_ptr.items) |item| {
+            for (entry.value_ptr.items, 0..) |item, idx| {
+                debug.debugLog("  CLEANUP MULTI [{}][{}]: value='{s}'", .{multi_count, idx, item});
                 self.allocator.free(item);
             }
             entry.value_ptr.deinit();
+            multi_count += 1;
         }
         self.multiple_selection_values.deinit();
+        debug.debugLog("Multiple selection values cleanup complete - freed {} entries", .{multi_count});
+        debug.debugLog("MenuState deinit complete", .{});
     }
 
     pub fn navigateUp(self: *Self) void {

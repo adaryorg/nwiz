@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 const std = @import("std");
+const debug = @import("debug.zig");
 
 pub const ConfigPaths = struct {
     menu_path: []const u8,
@@ -25,11 +26,11 @@ pub fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_f
         const home_dir = std.process.getEnvVarOwned(allocator, "HOME") catch |err| {
             switch (err) {
                 error.EnvironmentVariableNotFound => {
-                    std.debug.print("Error: HOME environment variable not found\n", .{});
+                    debug.debugLog("Error: HOME environment variable not found", .{});
                     return error.HomeNotFound;
                 },
                 else => {
-                    std.debug.print("Error: Failed to get HOME environment variable: {}\n", .{err});
+                    debug.debugLog("Error: Failed to get HOME environment variable: {}", .{err});
                     return err;
                 },
             }
@@ -42,7 +43,7 @@ pub fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_f
             switch (err) {
                 error.PathAlreadyExists => {},
                 else => {
-                    std.debug.print("Error: Failed to create config directory: {s}\n", .{config_dir_allocated});
+                    debug.debugLog("Error: Failed to create config directory: {s}", .{config_dir_allocated});
                     allocator.free(config_dir_allocated);
                     return error.ConfigDirNotFound;
                 },
@@ -56,8 +57,8 @@ pub fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_f
             const error_msg = try std.fmt.allocPrint(allocator, "{s}/menu.toml", .{config_dir_allocated});
             defer allocator.free(error_msg);
             allocator.free(config_dir_allocated);
-            std.debug.print("Error: Menu configuration file does not exist: {s}\n", .{error_msg});
-            std.debug.print("Please ensure Nocturne is properly installed and configured.\n", .{});
+            debug.debugLog("Error: Menu configuration file does not exist: {s}", .{error_msg});
+            debug.debugLog("Please ensure Nocturne is properly installed and configured.", .{});
             return error.MenuConfigNotFound;
         };
     }
@@ -75,7 +76,7 @@ pub fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_f
             switch (err) {
                 error.PathAlreadyExists => {},
                 else => {
-                    std.debug.print("Error: Failed to create install config directory: {s}\n", .{custom_dir});
+                    debug.debugLog("Error: Failed to create install config directory: {s}", .{custom_dir});
                     return err;
                 },
             }
