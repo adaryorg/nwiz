@@ -8,6 +8,7 @@ const theme = @import("theme.zig");
 const install = @import("install.zig");
 const bootstrap = @import("bootstrap.zig");
 const cli = @import("cli.zig");
+const debug = @import("debug.zig");
 
 pub const ConfigurationResult = struct {
     menu_config: menu.MenuConfig,
@@ -30,37 +31,55 @@ fn loadOrCreateInstallConfig(
     config_paths: bootstrap.ConfigPaths,
     menu_config: *const menu.MenuConfig,
 ) !install.InstallConfig {
+    debug.debugSection("ENTRY: loadOrCreateInstallConfig");
+    debug.debugLog("Function called - checking install.toml processing", .{});
     // Check if install.toml exists
+    debug.debugSection("Install Config File Check");
+    debug.debugLog("Checking if install.toml exists at: {s}", .{config_paths.install_path});
     if (std.fs.cwd().access(config_paths.install_path, .{})) {
+        debug.debugLog("File exists - loading install config", .{});
         // File exists - load and validate it
         var install_config = try install.loadInstallConfig(allocator, config_paths.install_path);
+        debug.debugLog("Install config loaded successfully", .{});
         
         // Validate that install.toml matches current menu structure
-        if (!try install.validateInstallConfigMatchesMenu(&install_config, menu_config)) {
+        debug.debugSection("Install Config Validation");
+        debug.debugLog("Validating install.toml against menu structure", .{});
+        const validation_result = try install.validateInstallConfigMatchesMenu(&install_config, menu_config);
+        debug.debugLog("Validation result: {}", .{validation_result});
+        if (!validation_result) {
+            debug.debugLog("Structure mismatch detected - recreating install.toml", .{});
             // Structure mismatch - silently recreate the file
             install_config.deinit();
             
             // Try to delete the existing file
             std.fs.cwd().deleteFile(config_paths.install_path) catch |err| {
+                debug.debugLog("Error deleting install.toml: {}", .{err});
                 // Only show error if we can't delete the file
                 std.debug.print("Error: Cannot recreate install.toml - file is locked or protected\n", .{});
                 return err;
             };
+            debug.debugLog("Old install.toml deleted successfully", .{});
             
             // Create new install config based on current menu
             install_config = try install.createInstallConfigFromMenu(allocator, menu_config);
             try install.saveInstallConfig(&install_config, config_paths.install_path);
+            debug.debugLog("New install.toml created with menu defaults", .{});
+        } else {
+            debug.debugLog("Validation passed - keeping existing install.toml", .{});
         }
         
-        // Update values to match menu defaults (silently)
-        try install.updateInstallConfigWithMenuDefaults(&install_config, menu_config);
-        try install.saveInstallConfig(&install_config, config_paths.install_path);
+        // Note: Don't update install.toml with defaults - preserve user values
+        // Since we use bypass loading directly into MenuState, InstallConfig defaults aren't needed
         
+        debug.debugLog("Returning existing install config", .{});
         return install_config;
     } else |_| {
+        debug.debugLog("File doesn't exist - creating new install.toml", .{});
         // File doesn't exist - create it with menu defaults (silently)
         var install_config = try install.createInstallConfigFromMenu(allocator, menu_config);
         try install.saveInstallConfig(&install_config, config_paths.install_path);
+        debug.debugLog("New install.toml saved", .{});
         return install_config;
     }
 }

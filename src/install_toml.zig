@@ -5,6 +5,7 @@ const std = @import("std");
 const toml = @import("toml");
 const install_mod = @import("install.zig");
 const memory = @import("utils/memory.zig");
+const debug = @import("debug.zig");
 
 const InstallConfig = install_mod.InstallConfig;
 const SelectionValue = install_mod.InstallConfig.SelectionValue;
@@ -72,9 +73,8 @@ fn parseInstallConfigFromTable(allocator: std.mem.Allocator, table: *const toml.
                                 }
                             }
                             
-                            if (valid_count > 0) {
-                                try config.setMultipleSelection(key, values[0..valid_count]);
-                            }
+                            // Always set multiple selection, even if empty
+                            try config.setMultipleSelection(key, values[0..valid_count]);
                         },
                         else => {}, // Skip non-string, non-array values
                     }
@@ -89,7 +89,14 @@ fn parseInstallConfigFromTable(allocator: std.mem.Allocator, table: *const toml.
 
 // Save install configuration to TOML file
 pub fn saveInstallConfigToToml(config: *const InstallConfig, file_path: []const u8) !void {
+    debug.debugSection("CRITICAL: Saving Install Config to File");
+    debug.debugLog("About to OVERWRITE install.toml at: {s}", .{file_path});
+    
+    // Note: Stack trace omitted due to API complexity
+    debug.debugLog("saveInstallConfigToToml called - check call stack manually", .{});
+    
     const file = std.fs.cwd().createFile(file_path, .{}) catch |err| {
+        debug.debugLog("Failed to create install file: {}", .{err});
         std.debug.print("Failed to create install file '{s}': {}\n", .{ file_path, err });
         return err;
     };
