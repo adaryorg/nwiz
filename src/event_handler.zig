@@ -70,6 +70,9 @@ pub fn handleKeyPress(key: vaxis.Key, context: *EventContext) !EventResult {
 }
 
 fn handleCtrlC(context: *EventContext) !EventResult {
+    // Log any completed command before force exit
+    logCompletedCommand(context);
+    
     // If there's a running shell wrapper, kill it directly
     if (context.global_shell_pid.*) |shell_pid| {
         _ = std.posix.kill(shell_pid, std.posix.SIG.KILL) catch {};
@@ -146,7 +149,8 @@ fn handleNormalMenuKeyPress(key: vaxis.Key, context: *EventContext) !EventResult
             // Switch to exit confirmation state
             context.app_state.* = .exit_confirmation;
         } else {
-            // No running process, exit immediately
+            // No running process, log any completed command and exit immediately
+            logCompletedCommand(context);
             sudo.requestShutdown();
             return EventResult.shutdown_requested;
         }
@@ -160,7 +164,8 @@ fn handleNormalMenuKeyPress(key: vaxis.Key, context: *EventContext) !EventResult
         // Go back if in submenu, exit if at root
         const went_back = context.menu_state.goBack() catch false;
         if (!went_back) {
-            // We're at root menu, exit the application
+            // We're at root menu, log any completed command and exit the application
+            logCompletedCommand(context);
             sudo.requestShutdown();
             return EventResult.shutdown_requested;
         }
@@ -231,6 +236,17 @@ fn handleMenuRightArrowKey(context: *EventContext) !void {
     }
 }
 
+// Helper function to log command output before cleanup
+fn logCompletedCommand(context: *EventContext) void {
+    if (context.async_output_viewer.*) |*output_viewer| {
+        if (context.async_command_executor.getExitCode()) |exit_code| {
+            const output = context.async_command_executor.getOutput();
+            const error_output = context.async_command_executor.getErrorOutput();
+            session_logger.logGlobalCommand(output_viewer.command, output_viewer.menu_item_name, output, error_output, exit_code);
+        }
+    }
+}
+
 fn handleOutputViewingKeyPress(key: vaxis.Key, context: *EventContext) !EventResult {
     if (context.async_output_viewer.*) |*viewer| {
         if (key.codepoint == 'q') {
@@ -239,7 +255,8 @@ fn handleOutputViewingKeyPress(key: vaxis.Key, context: *EventContext) !EventRes
                 // Switch to exit confirmation state
                 context.app_state.* = .exit_confirmation;
             } else {
-                // No running process, exit immediately
+                // No running process, log the command and exit immediately
+                logCompletedCommand(context);
                 sudo.requestShutdown();
                 return EventResult.shutdown_requested;
             }
@@ -258,14 +275,8 @@ fn handleOutputViewingKeyPress(key: vaxis.Key, context: *EventContext) !EventRes
             const available_height = context.vx.window().height -| 6; // Account for borders and footer
             viewer.scrollPageDown(available_height);
         } else if (key.matches(vaxis.Key.escape, .{})) {
-            // Log command output before cleanup by getting info from AsyncOutputViewer
-            if (context.async_output_viewer.*) |*output_viewer| {
-                if (context.async_command_executor.getExitCode()) |exit_code| {
-                    const output = context.async_command_executor.getOutput();
-                    const error_output = context.async_command_executor.getErrorOutput();
-                    session_logger.logGlobalCommand(output_viewer.command, output_viewer.menu_item_name, output, error_output, exit_code);
-                }
-            }
+            // Log command output before cleanup
+            logCompletedCommand(context);
             
             // Clean up command if still running
             context.async_command_executor.cleanup();
@@ -300,7 +311,9 @@ fn handleOutputViewingKeyPress(key: vaxis.Key, context: *EventContext) !EventRes
 
 fn handleExitConfirmationKeyPress(key: vaxis.Key, context: *EventContext) !EventResult {
     if (key.codepoint == 'q') {
-        // Second 'q' pressed - force exit
+        // Second 'q' pressed - log command first, then force exit
+        logCompletedCommand(context);
+        
         if (context.global_shell_pid.*) |shell_pid| {
             _ = std.posix.kill(shell_pid, std.posix.SIG.KILL) catch {};
             context.global_shell_pid.* = null;
