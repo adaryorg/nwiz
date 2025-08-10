@@ -87,6 +87,31 @@ fn parseMenuConfigFromTable(allocator: std.mem.Allocator, table: *const toml.Tab
                     config.logfile = null;
                 }
                 
+                // Parse sudo_refresh_period
+                if (menu_table.get("sudo_refresh_period")) |refresh_val| {
+                    switch (refresh_val) {
+                        .integer => |refresh_int| {
+                            // Validate range: minimum 30 seconds, maximum 3600 seconds (1 hour)
+                            if (refresh_int >= 30 and refresh_int <= 3600) {
+                                config.sudo_refresh_period = @intCast(refresh_int);
+                            } else {
+                                if (!isTestMode()) {
+                                    std.debug.print("Warning: sudo_refresh_period {} is out of range (30-3600), using default\n", .{refresh_int});
+                                }
+                                config.sudo_refresh_period = null;
+                            }
+                        },
+                        else => {
+                            if (!isTestMode()) {
+                                std.debug.print("Warning: sudo_refresh_period must be an integer, ignoring\n", .{});
+                            }
+                            config.sudo_refresh_period = null;
+                        },
+                    }
+                } else {
+                    config.sudo_refresh_period = null;
+                }
+                
                 // Parse ASCII art array
                 if (menu_table.get("ascii_art")) |art_val| {
                     switch (art_val) {

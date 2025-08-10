@@ -166,8 +166,6 @@ pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, me
             }
         }
         if (!found) {
-            std.debug.print("Error: install.toml contains key '{s}' which doesn't match any install_key or variable in current menu.toml\n", .{install_key});
-            std.debug.print("This suggests install.toml is from a different menu configuration.\n", .{});
             return false;
         }
     }
@@ -175,8 +173,6 @@ pub fn validateInstallConfigMatchesMenu(install_config: *const InstallConfig, me
     // Check if menu has keys that aren't in install.toml
     for (expected_keys.items) |expected_key| {
         if (!install_config.selections.contains(expected_key)) {
-            std.debug.print("Error: menu.toml contains install_key/variable '{s}' which is not found in install.toml\n", .{expected_key});
-            std.debug.print("install.toml may be outdated or corrupted.\n", .{});
             return false;
         }
     }

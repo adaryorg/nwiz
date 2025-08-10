@@ -126,6 +126,7 @@ pub const MenuConfig = struct {
     ascii_art: [][]const u8,
     shell: []const u8,
     logfile: ?[]const u8,
+    sudo_refresh_period: ?u32,  // Sudo refresh period in seconds
     items: std.HashMap([]const u8, MenuItem, std.hash_map.StringContext, std.hash_map.default_max_load_percentage),
 
     pub fn init(allocator: std.mem.Allocator) MenuConfig {
@@ -136,6 +137,7 @@ pub const MenuConfig = struct {
             .ascii_art = &[_][]const u8{},
             .shell = "bash", // Default to bash
             .logfile = null,
+            .sudo_refresh_period = null,  // Default: auto-detect or use 240 seconds
             .items = std.HashMap([]const u8, MenuItem, std.hash_map.StringContext, std.hash_map.default_max_load_percentage).init(allocator),
         };
     }

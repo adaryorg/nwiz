@@ -33,47 +33,34 @@ fn loadOrCreateInstallConfig(
     // Check if install.toml exists
     if (std.fs.cwd().access(config_paths.install_path, .{})) {
         // File exists - load and validate it
-        std.debug.print("Loading existing install configuration: {s}\n", .{config_paths.install_path});
         var install_config = try install.loadInstallConfig(allocator, config_paths.install_path);
         
         // Validate that install.toml matches current menu structure
         if (!try install.validateInstallConfigMatchesMenu(&install_config, menu_config)) {
-            std.debug.print("Warning: install.toml structure doesn't match current menu.toml\n", .{});
-            std.debug.print("Attempting to delete and recreate install.toml...\n", .{});
-            
-            // Clean up the current install config
+            // Structure mismatch - silently recreate the file
             install_config.deinit();
             
             // Try to delete the existing file
             std.fs.cwd().deleteFile(config_paths.install_path) catch |err| {
-                std.debug.print("Error: Failed to delete existing install.toml file: {s}\n", .{config_paths.install_path});
-                std.debug.print("Error details: {}\n", .{err});
-                std.debug.print("Please manually delete the file and restart the application.\n", .{});
+                // Only show error if we can't delete the file
+                std.debug.print("Error: Cannot recreate install.toml - file is locked or protected\n", .{});
                 return err;
             };
-            
-            std.debug.print("Successfully deleted old install.toml\n", .{});
-            std.debug.print("Creating new install.toml with current menu structure...\n", .{});
             
             // Create new install config based on current menu
             install_config = try install.createInstallConfigFromMenu(allocator, menu_config);
             try install.saveInstallConfig(&install_config, config_paths.install_path);
-            std.debug.print("Install configuration recreated: {s}\n", .{config_paths.install_path});
         }
         
-        // Update values to match menu defaults
-        std.debug.print("Updating install.toml values to match menu defaults...\n", .{});
+        // Update values to match menu defaults (silently)
         try install.updateInstallConfigWithMenuDefaults(&install_config, menu_config);
         try install.saveInstallConfig(&install_config, config_paths.install_path);
-        std.debug.print("Install configuration updated: {s}\n", .{config_paths.install_path});
         
         return install_config;
     } else |_| {
-        // File doesn't exist - create it with menu defaults
-        std.debug.print("Creating install.toml with default values from menu configuration...\n", .{});
+        // File doesn't exist - create it with menu defaults (silently)
         var install_config = try install.createInstallConfigFromMenu(allocator, menu_config);
         try install.saveInstallConfig(&install_config, config_paths.install_path);
-        std.debug.print("Install configuration created: {s}\n", .{config_paths.install_path});
         return install_config;
     }
 }
