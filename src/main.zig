@@ -189,9 +189,7 @@ fn handleAuthentication(app_config: *const cli.AppConfig, menu_config: *const me
             return error.AuthenticationFailed;
         }
     } else {
-        if (error_handler.global_error_handler) |handler| {
-            handler.logInfo("Running in no-sudo mode - commands requiring privileges may fail");
-        }
+        // No-sudo mode - silently continue without privileges
     }
 }
 
