@@ -23,13 +23,15 @@ A terminal-based installation wizard for the Nocturne desktop environment ecosys
 ### From Release
 
 **Linux x64:**
+
 ```bash
 mkdir -p ~/.local/bin
 curl -L https://github.com/adaryorg/nwiz/releases/latest/download/nwiz-linux-x64 -o ~/.local/bin/nwiz
 chmod +x ~/.local/bin/nwiz
 ```
 
-**macOS x64:**
+**macOS x64 (Intel):**
+
 ```bash
 mkdir -p ~/.local/bin
 curl -L https://github.com/adaryorg/nwiz/releases/latest/download/nwiz-macos-x64 -o ~/.local/bin/nwiz
@@ -37,6 +39,7 @@ chmod +x ~/.local/bin/nwiz
 ```
 
 **macOS ARM64 (Apple Silicon):**
+
 ```bash
 mkdir -p ~/.local/bin
 curl -L https://github.com/adaryorg/nwiz/releases/latest/download/nwiz-macos-arm64 -o ~/.local/bin/nwiz
@@ -46,23 +49,27 @@ chmod +x ~/.local/bin/nwiz
 **Add to PATH:**
 
 **Bash:**
+
 ```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
 **Zsh:**
+
 ```zsh
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
 **Fish:**
+
 ```fish
 fish_add_path ~/.local/bin
 ```
 
 **Nushell:**
+
 ```nu
 $env.PATH = ($env.PATH | split row (char esep) | prepend ($env.HOME | path join .local bin))
 echo '$env.PATH = ($env.PATH | split row (char esep) | prepend ($env.HOME | path join .local bin))' | save --append ~/.config/nushell/env.nu
@@ -76,7 +83,7 @@ Requires Zig 0.14.1+:
 git clone https://github.com/adaryorg/nwiz.git
 cd nwiz
 zig build
-sudo cp zig-out/bin/nwiz /usr/local/bin/
+sudo cp zig-out/bin/nwiz ~/.local/bin/
 ```
 
 ## Usage
@@ -133,21 +140,21 @@ See [USER_GUIDE.md](USER_GUIDE.md) for detailed batch mode configuration.
 
 ### Navigation
 
-| Key | Action |
-|-----|--------|
-| Up/Down | Navigate items |
-| Enter | Select/execute |
-| Escape | Go back |
+| Key        | Action            |
+| ---------- | ----------------- |
+| Up/Down    | Navigate items    |
+| Enter      | Select/execute    |
+| Escape     | Go back           |
 | Left/Right | Navigate submenus |
-| q | Exit |
-| Ctrl+C | Kill command |
+| q          | Exit              |
+| Ctrl+C     | Kill command      |
 
 ## Configuration
 
 Configuration files are stored in `~/.config/nwiz/`:
 
 - `menu.toml` - Menu structure and commands (required)
-- `theme.toml` - Visual customization (optional)  
+- `theme.toml` - Visual customization (optional)
 - `install.toml` - Installation state (auto-generated)
 
 ### Menu Configuration
