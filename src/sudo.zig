@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+const debug = @import("debug.zig");
 
 var shutdown_requested: bool = false;
 var shutdown_mutex: std.Thread.Mutex = .{};
@@ -203,7 +204,7 @@ pub fn configureRefreshPeriod(seconds: ?u32) void {
 }
 
 pub fn authenticateInitial() !bool {
-    std.debug.print("nwiz requires sudo access\n", .{});
+    debug.debugLog("nwiz requires sudo access", .{});
     
     const allocator = std.heap.page_allocator;
     const success = sudo_manager.authenticate(allocator) catch false;
@@ -215,7 +216,7 @@ pub fn authenticateInitial() !bool {
         
         return true;
     } else {
-        std.debug.print("Sudo authentication failed. Exiting.\n", .{});
+        debug.debugLog("Sudo authentication failed. Exiting.", .{});
         return false;
     }
 }

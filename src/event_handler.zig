@@ -14,6 +14,7 @@ const disclaimer = @import("disclaimer.zig");
 const memory = @import("utils/memory.zig");
 const app_context = @import("app_context.zig");
 const session_logger = @import("session_logger.zig");
+const debug = @import("debug.zig");
 
 pub const EventResult = enum {
     continue_running,
@@ -39,6 +40,7 @@ pub const EventContext = struct {
     global_shell_pid: *?std.posix.pid_t,
     global_async_executor: *?*executor.AsyncCommandExecutor,
     disclaimer_dialog: *?disclaimer.DisclaimerDialog,
+    batch_mode: ?*@import("batch.zig").BatchMode = null,
     
     // Convenience accessors
     pub fn allocator(self: *const EventContext) std.mem.Allocator {
@@ -55,8 +57,69 @@ pub const EventContext = struct {
 };
 
 pub fn handleKeyPress(key: vaxis.Key, context: *EventContext) !EventResult {
-    // Handle global keyboard shortcuts first
+    // Handle batch mode interruption for Ctrl+C, Esc, Q
+    if (context.batch_mode) |batch| {
+        if (batch.is_running) {
+            // Handle 'q' separately to show exit confirmation
+            if (key.codepoint == 'q') {
+                batch.interrupt();
+                
+                // If we're viewing output and a command is running, show exit confirmation
+                if (context.app_state.* == .viewing_output) {
+                    if (context.global_shell_pid.* != null) {
+                        // Show exit confirmation dialog
+                        context.app_state.* = .exit_confirmation;
+                    } else {
+                        // No running command, clean up and return to menu
+                        logCompletedCommand(context);
+                        context.async_command_executor.cleanup();
+                        if (context.async_output_viewer.*) |*output_viewer| {
+                            output_viewer.deinit();
+                        }
+                        context.async_output_viewer.* = null;
+                        context.app_state.* = .menu;
+                    }
+                }
+                return EventResult.continue_running;
+            }
+            
+            // Handle Ctrl+C - immediate exit in both regular and batch mode
+            if (key.codepoint == 'c' and key.mods.ctrl) {
+                batch.interrupt();
+                return try handleCtrlC(context);
+            }
+            
+            // Handle Esc - stop batch and return to menu
+            if (key.matches(vaxis.Key.escape, .{})) {
+                batch.interrupt();
+                // If we're viewing output, return to menu but stay at current location
+                if (context.app_state.* == .viewing_output) {
+                    // Log command output before cleanup
+                    logCompletedCommand(context);
+                    
+                    // Clean up command if still running
+                    context.async_command_executor.cleanup();
+                    if (context.async_output_viewer.*) |*output_viewer| {
+                        output_viewer.deinit();
+                    }
+                    context.async_output_viewer.* = null;
+                    
+                    context.app_state.* = .menu;
+                }
+                return EventResult.continue_running;
+            }
+        }
+    }
+    
+    // Handle global keyboard shortcuts first (but not if batch mode already handled Ctrl+C)
     if (key.codepoint == 'c' and key.mods.ctrl) {
+        // Skip global Ctrl+C if batch mode is running (already handled above)
+        if (context.batch_mode) |batch| {
+            if (batch.is_running) {
+                // Batch mode already handled this, don't override
+                return EventResult.continue_running;
+            }
+        }
         return handleCtrlC(context);
     }
 
@@ -103,7 +166,7 @@ fn handleMultipleSelectionModeKeyPress(key: vaxis.Key, context: *EventContext) !
         context.menu_state.navigateMultipleSelectionDown();
     } else if (key.matches(vaxis.Key.space, .{})) {
         context.menu_state.toggleMultipleSelectionOption() catch |err| {
-            std.debug.print("Failed to toggle option: {}\n", .{err});
+            debug.debugLog("Failed to toggle option: {}", .{err});
         };
     } else if (key.matches(vaxis.Key.enter, .{})) {
         context.menu_state.exitMultipleSelectionMode();
@@ -123,7 +186,7 @@ fn handleSelectorModeKeyPress(key: vaxis.Key, context: *EventContext) !EventResu
         context.menu_state.navigateSelectorDown();
     } else if (key.matches(vaxis.Key.enter, .{})) {
         context.menu_state.selectSelectorOption() catch |err| {
-            std.debug.print("Failed to select option: {}\n", .{err});
+            debug.debugLog("Failed to select option: {}", .{err});
         };
         
         // Note: Removed runtime save - will save on application exit only
@@ -200,7 +263,7 @@ fn handleMenuEnterKey(context: *EventContext) !EventResult {
             
             // Show disclaimer dialog
             context.disclaimer_dialog.* = disclaimer.DisclaimerDialog.init(context.allocator(), resolved_disclaimer_path, current_item.name, context.appTheme(), context.terminal_mode()) catch |err| {
-                std.debug.print("Failed to load disclaimer from {s}: {}\n", .{ resolved_disclaimer_path, err });
+                debug.debugLog("Failed to load disclaimer from {s}: {}", .{ resolved_disclaimer_path, err });
                 return EventResult.continue_running;
             };
             context.app_state.* = .viewing_disclaimer;
@@ -282,6 +345,14 @@ fn handleOutputViewingKeyPress(key: vaxis.Key, context: *EventContext) !EventRes
             // Kill running command with 'c' key
             if (context.async_command_executor.isRunning()) {
                 viewer.killCommand();
+                
+                // If in batch mode, also stop the entire batch execution
+                if (context.batch_mode) |batch| {
+                    if (batch.is_running) {
+                        debug.debugLog("Batch mode: Stopping batch execution due to 'c' key press", .{});
+                        batch.interrupt();
+                    }
+                }
             }
         } else if (key.codepoint == 's') {
             // Toggle output visibility
@@ -330,7 +401,7 @@ fn startActionCommand(context: *EventContext, command: []const u8, current_item:
     context.async_command_executor.startCommand(command) catch |err| {
         context.context.free(command_copy);
         context.context.free(menu_item_name_copy);
-        std.debug.print("Failed to start command: {}\n", .{err});
+        debug.debugLog("Failed to start command: {}", .{err});
         return;
     };
     

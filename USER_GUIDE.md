@@ -54,6 +54,10 @@ nwiz --write-theme <path>          # Export current theme to TOML file
 # Validation and scripting
 nwiz --lint <menu.toml>            # Validate menu configuration file
 nwiz --config-options <install.toml>  # Export config as NWIZ_* env variables
+
+# Batch mode execution
+nwiz --batch                        # Run all actions automatically
+nwiz --batch --answer-file <file>   # Use TOML answer file for values
 ```
 
 ### Navigation
@@ -982,6 +986,277 @@ nwiz
 ```
 
 This example demonstrates how themes, ASCII art, configuration persistence, and variable substitution work together to create a professional, branded interface for system administration tasks.
+
+## Batch Mode
+
+nwiz supports batch mode for automated execution of all menu actions without user interaction. This is ideal for scripting, automated deployments, and CI/CD pipelines.
+
+### Basic Batch Mode
+
+Run all actions in sequence automatically:
+
+```bash
+# Execute all actions with default values
+nwiz --batch
+
+# Batch mode with custom configuration
+nwiz --batch --config /path/to/menu.toml --no-sudo
+```
+
+In basic batch mode, nwiz:
+1. Executes all action items in menu hierarchy order
+2. Uses default values for selectors and multiple selections
+3. Pauses between actions (configurable, default 2 seconds)
+4. Displays progress with batch context (Action 1/5, Action 2/5, etc.)
+
+### Batch Mode with Answer Files
+
+Use TOML answer files to provide pre-configured values for selectors and multiple selections:
+
+```bash
+nwiz --batch --answer-file answers.toml
+```
+
+**Important**: The `--answer-file` parameter requires `--batch` to be specified. If `--answer-file` is used without `--batch`, it will be silently ignored.
+
+#### Creating Answer Files
+
+Answer files are TOML files that specify values for menu items with `install_key` attributes. The format mirrors the install.toml structure:
+
+**answers.toml example**:
+```toml
+[install]
+theme = "dark"
+editor_type = "vim"
+shell_type = "zsh"
+dev_tools = ["git", "nodejs", "vim"]
+project_features = ["logging", "metrics"]
+backup_destination = "/backup/remote"
+deploy_environment = "staging"
+```
+
+#### Answer File Structure Rules
+
+1. **Section**: All values must be under the `[install]` section
+2. **Key names**: Use lowercase versions of the `install_key` values from your menu
+3. **Single values**: For selector items, use strings: `key = "value"`
+4. **Multiple values**: For multiple_selection items, use arrays: `key = ["value1", "value2"]`
+5. **Case conversion**: `install_key = "LOG_LEVEL"` becomes `log_level = "debug"` in the answer file
+
+#### Example Menu → Answer File Mapping
+
+**menu.toml**:
+```toml
+[menu.config.theme]
+type = "selector"
+name = "UI Theme"
+install_key = "UI_THEME"
+options = ["light", "dark", "auto"]
+default = "auto"
+
+[menu.config.languages]
+type = "multiple_selection"
+name = "Programming Languages"
+install_key = "DEV_LANGUAGES"
+options = ["python", "javascript", "golang", "rust"]
+default = ["python"]
+```
+
+**answers.toml**:
+```toml
+[install]
+ui_theme = "dark"           # selector: single string value
+dev_languages = ["python", "javascript", "golang"]  # multiple_selection: array
+```
+
+### Batch Mode Configuration
+
+You can create dedicated batch configuration files to control batch execution:
+
+**batch-config.toml**:
+```toml
+[batch]
+pause_between_actions = 3    # Seconds to pause between actions (default: 2)
+
+[actions]
+# Specify which actions to run (optional - defaults to all actions)
+include = [
+    "menu.install.packages",
+    "menu.configure.system", 
+    "menu.deploy.services"
+]
+
+# Or exclude specific actions
+exclude = [
+    "menu.dangerous.reset"
+]
+```
+
+### Batch Mode Examples
+
+#### Complete Development Environment Setup
+
+**dev-menu.toml**:
+```toml
+[menu]
+title = "Development Environment Setup"
+description = "Automated development environment configuration"
+
+[menu.config.editor]
+type = "selector"
+name = "Code Editor"
+install_key = "CODE_EDITOR"
+options = ["vscode", "vim", "neovim", "sublime"]
+default = "vscode"
+
+[menu.config.languages]
+type = "multiple_selection"
+name = "Programming Languages"
+install_key = "LANGUAGES"
+options = ["python", "nodejs", "golang", "rust", "java"]
+default = ["python", "nodejs"]
+
+[menu.config.tools]
+type = "multiple_selection"
+name = "Development Tools"
+install_key = "DEV_TOOLS"
+options = ["git", "docker", "kubernetes", "terraform"]
+default = ["git"]
+
+[menu.install.languages]
+type = "action"
+name = "Install Languages"
+command = "./scripts/install-languages.sh"
+
+[menu.install.editor]
+type = "action"
+name = "Install Editor"
+command = "./scripts/install-editor.sh"
+
+[menu.install.tools]
+type = "action"
+name = "Install Tools"
+command = "./scripts/install-tools.sh"
+
+[menu.configure.dotfiles]
+type = "action"
+name = "Configure Dotfiles"
+command = "./scripts/setup-dotfiles.sh"
+```
+
+**dev-answers.toml**:
+```toml
+[install]
+code_editor = "neovim"
+languages = ["python", "nodejs", "golang", "rust"]
+dev_tools = ["git", "docker", "kubernetes"]
+```
+
+**Usage**:
+```bash
+# Run with specific answers
+nwiz --batch --answer-file dev-answers.toml --config dev-menu.toml
+
+# Scripts can access the values:
+# ./scripts/install-languages.sh uses $LANGUAGES
+# ./scripts/install-editor.sh uses $CODE_EDITOR
+# ./scripts/install-tools.sh uses $DEV_TOOLS
+```
+
+#### Server Deployment Example
+
+**deploy-answers.toml**:
+```toml
+[install]
+target_environment = "production"
+services = ["web-server", "database", "cache", "monitoring"]
+backup_enabled = "yes"
+ssl_enabled = "yes"
+```
+
+```bash
+# Automated deployment
+nwiz --batch \
+     --answer-file deploy-answers.toml \
+     --config deployment-menu.toml \
+     --log-file deployment-$(date +%Y%m%d).log
+```
+
+### Batch Mode Script Integration
+
+Shell scripts can load and use batch mode values:
+
+**install-script.sh**:
+```bash
+#!/bin/bash
+
+# Load configuration from answer file or install.toml
+eval $(nwiz --config-options install.toml)
+
+echo "Setting up environment with:"
+echo "  Editor: ${NWIZ_CODE_EDITOR:-vscode}"
+echo "  Languages: ${NWIZ_LANGUAGES:-python nodejs}"
+echo "  Tools: ${NWIZ_DEV_TOOLS:-git}"
+
+# Use the values in your installation logic
+for lang in $NWIZ_LANGUAGES; do
+    echo "Installing $lang..."
+    case $lang in
+        python) install_python ;;
+        nodejs) install_nodejs ;;
+        golang) install_golang ;;
+        rust) install_rust ;;
+    esac
+done
+
+install_editor "$NWIZ_CODE_EDITOR"
+```
+
+### Batch Mode Best Practices
+
+1. **Validation**: Test your answer files with normal interactive mode first
+2. **Error Handling**: Design scripts to handle missing or invalid values gracefully
+3. **Logging**: Use `--log-file` to capture full batch execution logs
+4. **Idempotency**: Make commands safe to run multiple times
+5. **Progress Feedback**: Use status prefixes and meaningful command output
+
+```toml
+[menu.deploy.app]
+type = "action"
+name = "Deploy Application"
+command = "./scripts/deploy-app.sh"
+nwiz_status_prefix = "Deploying application"
+show_output = true  # Show output immediately in batch mode
+```
+
+### Validation and Testing
+
+Test your batch configurations:
+
+```bash
+# Validate menu structure
+nwiz --lint menu.toml
+
+# Test with dry-run approach (if your scripts support it)
+DRYRUN=true nwiz --batch --answer-file test-answers.toml
+
+# Test interactively first
+nwiz --config menu.toml  # Make selections manually
+# Then copy resulting install.toml as your answer file
+```
+
+### Error Handling in Batch Mode
+
+**Script example**:
+```bash
+#!/bin/bash
+set -e  # Exit on first error
+
+# Use proper error handling in your scripts
+command1 || { echo "Command1 failed"; exit 1; }
+command2 || { echo "Command2 failed"; exit 1; }
+```
+
 
 ## Troubleshooting
 

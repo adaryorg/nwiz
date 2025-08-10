@@ -55,8 +55,7 @@ fn loadOrCreateInstallConfig(
             // Try to delete the existing file
             std.fs.cwd().deleteFile(config_paths.install_path) catch |err| {
                 debug.debugLog("Error deleting install.toml: {}", .{err});
-                // Only show error if we can't delete the file
-                std.debug.print("Error: Cannot recreate install.toml - file is locked or protected\n", .{});
+                debug.debugLog("Cannot recreate install.toml - file is locked or protected", .{});
                 return err;
             };
             debug.debugLog("Old install.toml deleted successfully", .{});
@@ -107,7 +106,7 @@ pub fn loadConfigurations(
     // Load menu configuration
     var menu_config = config.loadMenuConfig(allocator, config_paths.menu_path) catch |err| {
         allocator.free(install_path_copy);
-        std.debug.print("Failed to load menu configuration: {}\n", .{err});
+        debug.debugLog("Failed to load menu configuration: {}", .{err});
         return err;
     };
     errdefer menu_config.deinit(allocator);

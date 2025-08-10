@@ -1,0 +1,29 @@
+# Batch Mode Example Configuration
+# This file defines which actions to run and in what order
+
+[batch]
+# Global batch settings
+pause_between_actions = 2  # seconds to pause between actions
+stop_on_error = false      # continue even if actions fail
+
+# List of actions to run (sorted by sequence)
+[[action]]
+id = "basic.quick"
+sequence = 10
+
+[[action]]
+id = "basic.system"
+sequence = 20
+
+[[action]]
+id = "output.verbose"
+sequence = 30
+# Optional: custom values for this action
+[action.values]
+theme = "blue"
+dev_tools = ["vim", "nodejs"]
+
+# Commented out - will not run
+# [[action]]
+# id = "basic.failure"
+# sequence = 40

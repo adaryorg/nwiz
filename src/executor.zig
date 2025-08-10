@@ -196,6 +196,7 @@ pub const AsyncCommandExecutor = struct {
             _ = child.wait() catch {};
             self.allocator.destroy(child);
             self.child_process = null;
+            main.global_shell_pid = null;
         }
         self.is_running = false;
     }
@@ -261,14 +262,27 @@ pub const AsyncOutputViewer = struct {
     status_history_buffer: std.ArrayList(u8), // Simple text buffer for history
     timezone_offset_seconds: ?i32 = null, // Cached timezone offset
     
+    // Batch context
+    batch_context: ?BatchContext = null,
+    
     const Self = @This();
     
     const StatusMessage = struct {
         message: []const u8,
         timestamp: i64,
     };
+    
+    pub const BatchContext = struct {
+        current_action_index: usize,
+        total_actions: usize,
+        current_action_name: []const u8,
+    };
 
     pub fn init(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, menu_item_name: []const u8, app_theme: *const theme.Theme, ascii_art: [][]const u8, terminal_mode: tty_compat.TerminalMode, status_prefix: ?[]const u8, show_output_initial: ?bool) Self {
+        return Self.initWithBatch(allocator, async_executor, command, menu_item_name, app_theme, ascii_art, terminal_mode, status_prefix, show_output_initial, null);
+    }
+    
+    pub fn initWithBatch(allocator: std.mem.Allocator, async_executor: *AsyncCommandExecutor, command: []const u8, menu_item_name: []const u8, app_theme: *const theme.Theme, ascii_art: [][]const u8, terminal_mode: tty_compat.TerminalMode, status_prefix: ?[]const u8, show_output_initial: ?bool, batch_context: ?BatchContext) Self {
         // Determine initial show_output state:
         // - null: default behavior (show spinner initially)
         // - true: start with output visible
@@ -288,6 +302,7 @@ pub const AsyncOutputViewer = struct {
             .ascii_art = ascii_art,
             .status_prefix = status_prefix,
             .status_history_buffer = std.ArrayList(u8).init(allocator),
+            .batch_context = batch_context,
         };
     }
 
@@ -562,6 +577,11 @@ pub const AsyncOutputViewer = struct {
         else 
             "";
             
+        // Calculate left content length
+        const left_content = self.menu_item_name;
+        const left_content_len = left_content.len + status_indicator.len;
+        
+        // Render left content (menu item + status)
         const menu_item_segment = vaxis.Segment{
             .text = self.menu_item_name,
             .style = title_style,
@@ -577,6 +597,48 @@ pub const AsyncOutputViewer = struct {
             .style = title_style,
         };
         _ = status_win.printSegment(status_segment, .{ .row_offset = 0 });
+        
+        // Render batch information on the right if available
+        if (self.batch_context) |batch_ctx| {
+            // Use a fixed buffer to avoid dynamic allocation in render function
+            var batch_buffer: [128]u8 = undefined;
+            const batch_info = std.fmt.bufPrint(
+                &batch_buffer,
+                "[BATCH: {d}/{d} - {s}]",
+                .{ batch_ctx.current_action_index + 1, batch_ctx.total_actions, batch_ctx.current_action_name }
+            ) catch "[BATCH: Info unavailable]";
+            
+            // Calculate available space for batch info
+            const min_padding = 2;
+            const available_width = if (inner_win.width > left_content_len + min_padding) 
+                inner_win.width - left_content_len - min_padding 
+            else 
+                0;
+            
+            if (available_width >= 15) { // Minimum space needed
+                // Truncate if needed
+                const batch_display = if (batch_info.len > available_width) 
+                    batch_info[0..@min(batch_info.len, available_width)]
+                else 
+                    batch_info;
+                
+                // Right-align batch information
+                const batch_x = if (inner_win.width >= batch_display.len) 
+                    inner_win.width - batch_display.len 
+                else 
+                    0;
+                    
+                const batch_win = inner_win.child(.{
+                    .x_off = @intCast(batch_x),
+                    .y_off = @intCast(row),
+                });
+                const batch_segment = vaxis.Segment{
+                    .text = batch_display,
+                    .style = title_style,
+                };
+                _ = batch_win.printSegment(batch_segment, .{ .row_offset = 0 });
+            }
+        }
         row += 2;
 
         if (!self.show_output) {
@@ -787,13 +849,13 @@ pub const AsyncOutputViewer = struct {
         const help_style = vaxis.Style{ .fg = self.theme.footer_text.toVaxisColorCompat(self.terminal_mode) };
         
         const help_text = if (!self.show_output and self.async_executor.isRunning())
-            "s: Show output | c: Kill command | Esc: Back to menu | Ctrl+C: Exit app"
+            "s: Show output | c: Kill command | Esc: Back to menu | q: Quit"
         else if (self.show_output and self.async_executor.isRunning())
             "↑/↓: Scroll | g: Jump to top | G: Jump to bottom | s: Hide | c: Kill | Esc: Back"
         else if (!self.show_output)
-            "s: Show output | ↑/↓: Scroll | g: Jump to top | G: Jump to bottom | Esc: Back"
+            "s: Show output | Esc: Back | q: Quit"
         else
-            "↑/↓: Scroll | g: Jump to top | G: Jump to bottom | s: Hide | Esc: Back";
+            "↑/↓: Scroll | g: Jump to top | G: Jump to bottom | s: Hide | Esc: Back | q: Quit";
             
         const help_segment = vaxis.Segment{
             .text = help_text,

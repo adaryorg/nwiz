@@ -3,22 +3,20 @@
 
 const std = @import("std");
 const install = @import("install.zig");
+const file_validation = @import("utils/file_validation.zig");
 
 pub fn readConfigurationOptions(allocator: std.mem.Allocator, install_toml_path: []const u8) !void {
     
+    // Validate file exists first using unified validation
+    file_validation.validateFileForInternal(install_toml_path, "Install configuration") catch {
+        std.debug.print("# Please ensure the file exists or run nwiz normally to create it.\n", .{});
+        return;
+    };
+    
     // Load install configuration
     var install_config = install.loadInstallConfig(allocator, install_toml_path) catch |err| {
-        switch (err) {
-            error.FileNotFound => {
-                std.debug.print("# Error: Install configuration file not found: {s}\n", .{install_toml_path});
-                std.debug.print("# Please ensure the file exists or run nwiz normally to create it.\n", .{});
-                return;
-            },
-            else => {
-                std.debug.print("# Error: Failed to read install configuration: {}\n", .{err});
-                return;
-            },
-        }
+        std.debug.print("# Error: Failed to read install configuration: {}\n", .{err});
+        return;
     };
     defer install_config.deinit();
     

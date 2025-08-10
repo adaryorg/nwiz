@@ -24,6 +24,8 @@ const app_context = @import("app_context.zig");
 const error_handler = @import("error_handler.zig");
 const session_logger = @import("session_logger.zig");
 const debug = @import("debug.zig");
+const batch = @import("batch.zig");
+const batch_executor = @import("batch_executor.zig");
 
 // Suppress vaxis info logging messages  
 pub const std_options: std.Options = .{
@@ -50,6 +52,7 @@ pub fn panic(message: []const u8, stack_trace: ?*std.builtin.StackTrace, ret_add
     }
     terminal.restoreTerminalCompletely();
     
+    // Panic messages must go to stderr as the app is crashing
     std.debug.print("PANIC: {s}\n", .{message});
     std.process.exit(1);
 }
@@ -189,9 +192,7 @@ fn handleAuthentication(app_config: *const cli.AppConfig, menu_config: *const me
             return error.AuthenticationFailed;
         }
     } else {
-        if (error_handler.global_error_handler) |handler| {
-            handler.logInfo("Running in no-sudo mode - commands requiring privileges may fail");
-        }
+        // No-sudo mode - silently continue without privileges
     }
 }
 
@@ -221,6 +222,7 @@ fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppC
     // Initialize debug logging BEFORE configuration loading
     if (app_config.debug_file_path) |debug_path| {
         debug.initDebugLogging(debug_path) catch |err| {
+            // Debug initialization failure must go to stderr since debug isn't available yet
             std.debug.print("Failed to initialize debug logging to '{s}': {}\n", .{ debug_path, err });
         };
         debug.debugLog("Debug logging initialized successfully", .{});
@@ -248,13 +250,13 @@ fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppC
     // Initialize session logging
     const log_file_path = determineLogFilePath(app_config, &configs.menu_config);
     session_logger.SessionLogger.testWriteAccess(allocator, log_file_path) catch |err| {
-        std.debug.print("Failed to initialize log file '{s}': {}\n", .{ log_file_path, err });
-        std.debug.print("Please check permissions or specify a different log file with --log-file\n", .{});
+        debug.debugLog("Failed to initialize log file '{s}': {}", .{ log_file_path, err });
+        debug.debugLog("Please check permissions or specify a different log file with --log-file", .{});
         return;
     };
 
     _ = session_logger.initGlobalLogger(allocator, log_file_path) catch |err| {
-        std.debug.print("Failed to initialize session logger: {}\n", .{err});
+        debug.debugLog("Failed to initialize session logger: {}", .{err});
         return;
     };
     defer {
@@ -301,7 +303,7 @@ fn initializeAndRunTUI(allocator: std.mem.Allocator, configs: *const app_init.Co
     // Detect terminal mode and setup application
     const terminal_mode = tty_compat.detectTerminalMode();
     if (terminal_mode == .tty) {
-        std.debug.print("Running in TTY mode - using ANSI 8-color palette and simple borders\n", .{});
+        debug.debugLog("Running in TTY mode - using ANSI 8-color palette and simple borders", .{});
     }
 
     // Run the main application
@@ -315,19 +317,15 @@ fn initializeTty() !vaxis.Tty {
 fn handleTtyError(err: anyerror) void {
     switch (err) {
         error.Unexpected => {
-            std.debug.print("\n=== Terminal Access Error ===\n", .{});
-            std.debug.print("Error: Unable to access /dev/tty (errno: 6 - ENXIO)\n", .{});
-            std.debug.print("This typically indicates a terminal orphaning issue.\n", .{});
-            std.debug.print("\nSolutions to try:\n", .{});
-            std.debug.print("1. Run the application in a fresh terminal window\n", .{});
-            std.debug.print("2. If you recently ran sudo, restart your terminal session\n", .{});
-            std.debug.print("3. Make sure you're not running in an IDE console or subprocess\n", .{});
-            std.debug.print("4. Try running from a native terminal (xterm, gnome-terminal, etc.)\n", .{});
+            // Log terminal access errors to debug file
+            debug.debugLog("Terminal Access Error: Unable to access /dev/tty (errno: 6 - ENXIO)", .{});
+            debug.debugLog("This typically indicates a terminal orphaning issue", .{});
+            debug.debugLog("Solutions: 1) Fresh terminal window 2) Restart terminal after sudo 3) Use native terminal", .{});
         },
         else => {
-            std.debug.print("\n=== Terminal Initialization Error ===\n", .{});
-            std.debug.print("Error: {}\n", .{err});
-            std.debug.print("Please ensure you're running in a compatible terminal.\n", .{});
+            // Log terminal initialization errors to debug file
+            debug.debugLog("Terminal Initialization Error: {}", .{err});
+            debug.debugLog("Please ensure you're running in a compatible terminal", .{});
         },
     }
 }
@@ -352,6 +350,30 @@ fn runMainApplication(
     
     var application_state = try initializeApplicationState(allocator, configs, &app_ctx);
     defer cleanupApplicationState(&application_state);
+
+    // Initialize batch mode if requested
+    var batch_mode: ?batch.BatchMode = null;
+    var batch_executor_instance: ?batch_executor.BatchExecutor = null;
+    defer {
+        if (batch_mode) |*bm| {
+            bm.deinit();
+        }
+    }
+    
+    if (app_config.batch_mode) {
+        batch_mode = if (app_config.answer_file) |file_path|
+            batch.BatchMode.loadFromFile(allocator, file_path) catch blk: {
+                // Silently fall back to default sequence if batch file loading fails
+                break :blk try batch.BatchMode.createDefaultSequence(allocator, &configs.menu_config);
+            }
+        else
+            try batch.BatchMode.createDefaultSequence(allocator, &configs.menu_config);
+            
+        if (batch_mode.?.config.actions.len == 0) {
+            return;
+        }
+        batch_mode.?.start();
+    }
 
     // Start background thread to maintain sudo authentication (if enabled)
     const renewal_thread = if (app_config.use_sudo) try sudo.startBackgroundRenewal() else null;
@@ -387,10 +409,16 @@ fn runMainApplication(
         .global_shell_pid = &global_shell_pid,
         .global_async_executor = &global_async_executor,
         .disclaimer_dialog = &application_state.disclaimer_dialog,
+        .batch_mode = if (batch_mode) |*bm| bm else null,
     };
 
+    // Initialize batch executor if in batch mode
+    if (batch_mode) |*bm| {
+        batch_executor_instance = batch_executor.BatchExecutor.init(bm, &configs.menu_config, &event_context);
+    }
+
     // Run the main event and render loop
-    try runMainLoop(allocator, vx, tty, loop, &event_context, &application_state);
+    try runMainLoop(allocator, vx, tty, loop, &event_context, &application_state, &batch_executor_instance);
 
     // Save current MenuState values to install.toml before exit
     install_integration.saveMenuStateToInstallConfig(
@@ -466,11 +494,22 @@ fn runMainLoop(
     tty: *vaxis.Tty,
     loop: *vaxis.Loop(Event),
     event_context: *event_handler.EventContext,
-    app_state: *ApplicationState
+    app_state: *ApplicationState,
+    batch_executor_instance: *?batch_executor.BatchExecutor
 ) !void {
     // Main event loop
     var should_exit = false;
     while (!sudo.shouldShutdown() and !terminal.signal_exit_requested and !should_exit) {
+        // Handle batch execution
+        if (batch_executor_instance.*) |*batch_exec| {
+            if (batch_exec.batch_mode.is_running and !batch_exec.batch_mode.is_interrupted) {
+                if (!try batch_exec.executeNext()) {
+                    // All actions completed
+                    batch_exec.batch_mode.is_running = false;
+                }
+            }
+        }
+        
         // Handle events
         should_exit = try handleEvents(allocator, vx, tty, loop, event_context);
         
