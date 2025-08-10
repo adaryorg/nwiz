@@ -364,27 +364,6 @@ Common manual configurations:
 - **Long-running tasks**: `sudo_refresh_period = 600` (10 minutes)  
 - **Development systems**: `sudo_refresh_period = 120` (2 minutes)
 
-##### Performance Benefits
-
-The intelligent sudo management provides:
-- **99% CPU usage reduction**: From 1200 wakeups/minute to ~0.25
-- **Instant exit**: Application terminates in <10ms when requested
-- **Battery optimization**: Significant improvement on laptops
-- **System adaptation**: Works optimally with any sudo configuration
-
-##### Configuration Priority
-
-The system uses this priority order:
-1. **Manual override**: `sudo_refresh_period` in menu.toml (skips detection)
-2. **Auto-detection**: System sudoers configuration analysis
-3. **Default fallback**: 240 seconds (4 minutes)
-
-At startup, nwiz displays which method is being used:
-```
-Sudo timeout detected: 15 minutes (from /etc/sudoers)
-Sudo refresh period: 880 seconds (auto-detected: 15min - 20s)
-```
-
 #### ASCII Art Banner
 
 You can add an ASCII art banner that displays at the top of your menu. The banner supports up to 10 lines and is defined as an array in the root menu section:
