@@ -403,7 +403,6 @@ nwiz comes with several built-in themes that you can use immediately. The defaul
 - **fire**: Red/orange gradient theme with warm colors
 - **rainbow**: Colorful rainbow theme with vibrant colors spanning the full spectrum
 - **greyscale**: Monochromatic theme with dark grey to light grey gradient
-- **high_contrast**: High accessibility theme with alternating black/white and bright accent colors
 
 You can view all available themes with their color previews:
 
@@ -421,7 +420,6 @@ nwiz --theme nature
 nwiz --theme fire
 nwiz --theme rainbow
 nwiz --theme greyscale
-nwiz --theme high_contrast
 ```
 
 ### Custom Themes
@@ -553,7 +551,6 @@ nwiz --write-theme my-theme.toml
 # Export specific built-in theme
 nwiz -t rainbow --write-theme rainbow-custom.toml
 nwiz -t greyscale --write-theme grey-theme.toml
-nwiz -t high_contrast --write-theme accessible-theme.toml
 ```
 
 This creates a complete theme.toml file that you can:

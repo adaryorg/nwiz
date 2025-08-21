@@ -238,42 +238,6 @@ pub const Theme = struct {
         };
     }
     
-    pub fn createHighContrastTheme() Theme {
-        const gradient = [10]ThemeColor{
-            // High contrast theme with bright, easily distinguishable colors
-            ThemeColor{ .r = 0xff, .g = 0xff, .b = 0x00 }, // Bright Yellow
-            ThemeColor{ .r = 0xff, .g = 0x00, .b = 0xff }, // Bright Magenta
-            ThemeColor{ .r = 0x00, .g = 0xff, .b = 0xff }, // Bright Cyan
-            ThemeColor{ .r = 0x00, .g = 0xff, .b = 0x00 }, // Bright Green
-            ThemeColor{ .r = 0xff, .g = 0x80, .b = 0x00 }, // Bright Orange
-            ThemeColor{ .r = 0x80, .g = 0x00, .b = 0xff }, // Bright Purple
-            ThemeColor{ .r = 0xff, .g = 0x00, .b = 0x80 }, // Bright Pink
-            ThemeColor{ .r = 0x00, .g = 0x80, .b = 0xff }, // Bright Blue
-            ThemeColor{ .r = 0x80, .g = 0xff, .b = 0x00 }, // Bright Lime
-            ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff }, // Pure White
-        };
-        
-        const white = ThemeColor{ .r = 0xff, .g = 0xff, .b = 0xff };
-        const light_grey = ThemeColor{ .r = 0xcc, .g = 0xcc, .b = 0xcc };
-        const dark_grey = ThemeColor{ .r = 0x00, .g = 0x00, .b = 0x00 };
-        
-        return Theme{
-            .gradient = gradient,
-            .white = white,
-            .light_grey = light_grey,
-            .dark_grey = dark_grey,
-            .ascii_art = gradient,
-            .selected_menu_item = gradient[0], // Bright Yellow
-            .unselected_menu_item = white,
-            .menu_header = gradient[2], // Bright Cyan
-            .footer_text = light_grey,
-            .menu_item_comment = gradient[1], // Bright Magenta
-            .menu_description = light_grey,
-            .selector_option = gradient[3], // Bright Green
-            .selector_selected_option = gradient[0], // Bright Yellow
-            .border = gradient[9], // Pure White
-        };
-    }
     
     pub fn createBuiltinTheme(builtin: BuiltinTheme) Theme {
         return switch (builtin) {

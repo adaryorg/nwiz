@@ -122,7 +122,6 @@ test "BuiltinTheme - exact name matching" {
     try testing.expect(BuiltinTheme.fromString("fire") == .fire);
     try testing.expect(BuiltinTheme.fromString("rainbow") == .rainbow);
     try testing.expect(BuiltinTheme.fromString("greyscale") == .greyscale);
-    try testing.expect(BuiltinTheme.fromString("high_contrast") == .high_contrast);
     
     // Test non-existent theme
     try testing.expect(BuiltinTheme.fromString("nonexistent") == null);
@@ -139,11 +138,9 @@ test "BuiltinTheme - case insensitive matching" {
     // Test mixed case
     try testing.expect(BuiltinTheme.fromString("NoCtuRne") == .nocturne);
     try testing.expect(BuiltinTheme.fromString("FoReSt") == .forest);
-    try testing.expect(BuiltinTheme.fromString("High_Contrast") == .high_contrast);
     
     // Test with different casing
     try testing.expect(BuiltinTheme.fromString("greyScale") == .greyscale);
-    try testing.expect(BuiltinTheme.fromString("HIGH_CONTRAST") == .high_contrast);
 }
 
 test "BuiltinTheme - fuzzy matching with prefixes" {
@@ -155,7 +152,6 @@ test "BuiltinTheme - fuzzy matching with prefixes" {
     try testing.expect(BuiltinTheme.fromString("fi") == .fire);
     try testing.expect(BuiltinTheme.fromString("rain") == .rainbow);
     try testing.expect(BuiltinTheme.fromString("grey") == .greyscale);
-    try testing.expect(BuiltinTheme.fromString("high") == .high_contrast);
     
     // Test single character prefixes
     try testing.expect(BuiltinTheme.fromString("n") == .nocturne); // First match
@@ -172,7 +168,6 @@ test "BuiltinTheme - substring matching fallback" {
     // These should match via substring search when prefix doesn't work
     try testing.expect(BuiltinTheme.fromString("bow") == .rainbow); // "rainbow" contains "bow"
     try testing.expect(BuiltinTheme.fromString("scale") == .greyscale); // "greyscale" contains "scale"
-    try testing.expect(BuiltinTheme.fromString("contrast") == .high_contrast); // "high_contrast" contains "contrast"
     try testing.expect(BuiltinTheme.fromString("ture") == .nature); // "nature" contains "ture"
     
     // Test non-matching substrings
@@ -203,18 +198,17 @@ test "BuiltinTheme - getName function" {
     try testing.expectEqualStrings("fire", BuiltinTheme.fire.getName());
     try testing.expectEqualStrings("rainbow", BuiltinTheme.rainbow.getName());
     try testing.expectEqualStrings("greyscale", BuiltinTheme.greyscale.getName());
-    try testing.expectEqualStrings("high_contrast", BuiltinTheme.high_contrast.getName());
 }
 
 test "BuiltinTheme - getAllThemes completeness" {
     const all_themes = BuiltinTheme.getAllThemes();
     
-    // Should have all 8 themes
-    try testing.expectEqual(@as(usize, 8), all_themes.len);
+    // Should have all 7 themes
+    try testing.expectEqual(@as(usize, 7), all_themes.len);
     
     // Should contain all expected themes
-    var found_themes = [_]bool{false} ** 8;
-    const expected = [_]BuiltinTheme{ .nocturne, .forest, .water, .nature, .fire, .rainbow, .greyscale, .high_contrast };
+    var found_themes = [_]bool{false} ** 7;
+    const expected = [_]BuiltinTheme{ .nocturne, .forest, .water, .nature, .fire, .rainbow, .greyscale };
     
     for (all_themes) |theme_in_list| {
         for (expected, 0..) |expected_theme, i| {
@@ -298,30 +292,6 @@ test "Theme - greyscale theme creation" {
     try testing.expectEqual(greyscale.light_grey.g, greyscale.light_grey.b);
 }
 
-test "Theme - high contrast theme creation" {
-    const high_contrast = Theme.createHighContrastTheme();
-    
-    // Test that it has the expected structure
-    try testing.expect(high_contrast.gradient.len == 10);
-    
-    // Test that colors are high contrast (bright, saturated colors)
-    // Bright Yellow (first color)
-    try testing.expectEqual(@as(u8, 255), high_contrast.gradient[0].r);
-    try testing.expectEqual(@as(u8, 255), high_contrast.gradient[0].g);
-    try testing.expectEqual(@as(u8, 0), high_contrast.gradient[0].b);
-    
-    // Bright Magenta (second color)
-    try testing.expectEqual(@as(u8, 255), high_contrast.gradient[1].r);
-    try testing.expectEqual(@as(u8, 0), high_contrast.gradient[1].g);
-    try testing.expectEqual(@as(u8, 255), high_contrast.gradient[1].b);
-    
-    // Test that most colors have at least one channel at max or min value
-    for (high_contrast.gradient) |color| {
-        const has_max_channel = (color.r == 255) or (color.g == 255) or (color.b == 255);
-        const has_min_channel = (color.r == 0) or (color.g == 0) or (color.b == 0);
-        try testing.expect(has_max_channel or has_min_channel);
-    }
-}
 
 test "Theme - builtin theme creation" {
     // Test that createBuiltinTheme works for all builtin themes
