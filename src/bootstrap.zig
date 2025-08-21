@@ -8,6 +8,22 @@ pub const ConfigPaths = struct {
     menu_path: []const u8,
     theme_path: []const u8,
     install_path: []const u8,
+    
+    pub fn deinit(self: *const ConfigPaths, allocator: std.mem.Allocator) void {
+        const info = @typeInfo(ConfigPaths);
+        
+        inline for (info.@"struct".fields) |field| {
+            const field_info = @typeInfo(field.type);
+            
+            // Check if it's a string slice ([]const u8)
+            if (field_info == .pointer and field_info.pointer.size == .slice) {
+                const child_info = @typeInfo(field_info.pointer.child);
+                if (child_info == .int and field_info.pointer.child == u8) {
+                    allocator.free(@field(self, field.name));
+                }
+            }
+        }
+    }
 };
 
 pub fn checkConfigurationBootstrap(allocator: std.mem.Allocator, custom_config_file: ?[]const u8, custom_install_config_dir: ?[]const u8) !ConfigPaths {

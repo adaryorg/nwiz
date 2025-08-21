@@ -112,7 +112,7 @@ test "CLI - default configuration" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
 
     try testing.expect(config.should_continue);
     try testing.expect(config.use_sudo);
@@ -133,11 +133,11 @@ test "CLI - help flag parsing" {
     const allocator = gpa.allocator();
 
     const config1 = try parseTestArgs(allocator, &[_][]const u8{"--help"});
-    defer cli.deinitAppConfig(allocator, &config1);
+    defer config1.deinit(allocator);
     try testing.expect(!config1.should_continue);
 
     const config2 = try parseTestArgs(allocator, &[_][]const u8{"-h"});
-    defer cli.deinitAppConfig(allocator, &config2);
+    defer config2.deinit(allocator);
     try testing.expect(!config2.should_continue);
 }
 
@@ -147,11 +147,11 @@ test "CLI - version flag parsing" {
     const allocator = gpa.allocator();
 
     const config1 = try parseTestArgs(allocator, &[_][]const u8{"--version"});
-    defer cli.deinitAppConfig(allocator, &config1);
+    defer config1.deinit(allocator);
     try testing.expect(!config1.should_continue);
 
     const config2 = try parseTestArgs(allocator, &[_][]const u8{"-v"});
-    defer cli.deinitAppConfig(allocator, &config2);
+    defer config2.deinit(allocator);
     try testing.expect(!config2.should_continue);
 }
 
@@ -161,12 +161,12 @@ test "CLI - no-sudo flag parsing" {
     const allocator = gpa.allocator();
 
     const config1 = try parseTestArgs(allocator, &[_][]const u8{"--no-sudo"});
-    defer cli.deinitAppConfig(allocator, &config1);
+    defer config1.deinit(allocator);
     try testing.expect(config1.should_continue);
     try testing.expect(!config1.use_sudo);
 
     const config2 = try parseTestArgs(allocator, &[_][]const u8{"-n"});
-    defer cli.deinitAppConfig(allocator, &config2);
+    defer config2.deinit(allocator);
     try testing.expect(config2.should_continue);
     try testing.expect(!config2.use_sudo);
 }
@@ -177,13 +177,13 @@ test "CLI - config file parsing" {
     const allocator = gpa.allocator();
 
     const config1 = try parseTestArgs(allocator, &[_][]const u8{"--config", "/path/to/config.toml"});
-    defer cli.deinitAppConfig(allocator, &config1);
+    defer config1.deinit(allocator);
     try testing.expect(config1.should_continue);
     try testing.expect(config1.config_file != null);
     try testing.expectEqualStrings("/path/to/config.toml", config1.config_file.?);
 
     const config2 = try parseTestArgs(allocator, &[_][]const u8{"-c", "another-config.toml"});
-    defer cli.deinitAppConfig(allocator, &config2);
+    defer config2.deinit(allocator);
     try testing.expect(config2.config_file != null);
     try testing.expectEqualStrings("another-config.toml", config2.config_file.?);
 }
@@ -194,12 +194,12 @@ test "CLI - theme specification parsing" {
     const allocator = gpa.allocator();
 
     const config1 = try parseTestArgs(allocator, &[_][]const u8{"--theme", "nocturne"});
-    defer cli.deinitAppConfig(allocator, &config1);
+    defer config1.deinit(allocator);
     try testing.expect(config1.theme_spec != null);
     try testing.expectEqualStrings("nocturne", config1.theme_spec.?);
 
     const config2 = try parseTestArgs(allocator, &[_][]const u8{"-t", "/path/to/theme.toml"});
-    defer cli.deinitAppConfig(allocator, &config2);
+    defer config2.deinit(allocator);
     try testing.expect(config2.theme_spec != null);
     try testing.expectEqualStrings("/path/to/theme.toml", config2.theme_spec.?);
 }
@@ -210,7 +210,7 @@ test "CLI - install config directory parsing" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{"--install-config-dir", "/custom/path"});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
     try testing.expect(config.install_config_dir != null);
     try testing.expectEqualStrings("/custom/path", config.install_config_dir.?);
 }
@@ -221,7 +221,7 @@ test "CLI - config options parsing" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{"--config-options", "install.toml"});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
     try testing.expect(config.config_options != null);
     try testing.expectEqualStrings("install.toml", config.config_options.?);
     try testing.expect(!config.use_sudo); // Should disable sudo
@@ -233,7 +233,7 @@ test "CLI - lint file parsing" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{"--lint", "menu.toml"});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
     try testing.expect(config.lint_menu_file != null);
     try testing.expectEqualStrings("menu.toml", config.lint_menu_file.?);
     try testing.expect(!config.use_sudo); // Should disable sudo
@@ -245,7 +245,7 @@ test "CLI - write theme parsing" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{"--write-theme", "output.toml"});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
     try testing.expect(config.write_theme_path != null);
     try testing.expectEqualStrings("output.toml", config.write_theme_path.?);
     try testing.expect(!config.use_sudo); // Should disable sudo
@@ -257,7 +257,7 @@ test "CLI - show theme parsing" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{"--show-theme", "forest"});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
     try testing.expect(config.show_theme_name != null);
     try testing.expectEqualStrings("forest", config.show_theme_name.?);
     try testing.expect(!config.should_continue);
@@ -269,7 +269,7 @@ test "CLI - list themes parsing" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{"--list-themes"});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
     try testing.expect(config.list_themes);
     try testing.expect(!config.should_continue);
 }
@@ -280,7 +280,7 @@ test "CLI - log file parsing" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{"--log-file", "/custom/log.txt"});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
     try testing.expect(config.log_file_path != null);
     try testing.expectEqualStrings("/custom/log.txt", config.log_file_path.?);
     try testing.expect(config.use_sudo); // Should not disable sudo
@@ -294,7 +294,7 @@ test "CLI - multiple arguments parsing" {
     const config = try parseTestArgs(allocator, &[_][]const u8{
         "--no-sudo", "--config", "custom.toml", "--theme", "forest", "--log-file", "debug.log"
     });
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
 
     try testing.expect(config.should_continue);
     try testing.expect(!config.use_sudo);
@@ -313,22 +313,22 @@ test "CLI - argument parsing with missing values" {
 
     // Missing config file path
     const config1 = try parseTestArgs(allocator, &[_][]const u8{"--config"});
-    defer cli.deinitAppConfig(allocator, &config1);
+    defer config1.deinit(allocator);
     try testing.expect(!config1.should_continue);
 
     // Missing theme name
     const config2 = try parseTestArgs(allocator, &[_][]const u8{"--theme"});
-    defer cli.deinitAppConfig(allocator, &config2);
+    defer config2.deinit(allocator);
     try testing.expect(!config2.should_continue);
 
     // Missing log file path
     const config3 = try parseTestArgs(allocator, &[_][]const u8{"--log-file"});
-    defer cli.deinitAppConfig(allocator, &config3);
+    defer config3.deinit(allocator);
     try testing.expect(!config3.should_continue);
 
     // Missing show-theme value
     const config4 = try parseTestArgs(allocator, &[_][]const u8{"--show-theme"});
-    defer cli.deinitAppConfig(allocator, &config4);
+    defer config4.deinit(allocator);
     try testing.expect(!config4.should_continue);
 }
 
@@ -338,7 +338,7 @@ test "CLI - invalid argument handling" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{"--invalid-argument"});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
     try testing.expect(!config.should_continue);
 }
 
@@ -367,8 +367,8 @@ test "CLI - AppConfig memory management" {
     try testing.expect(config.write_theme_path != null);
     try testing.expect(config.log_file_path != null);
 
-    // deinitAppConfig should free all these without issues
-    cli.deinitAppConfig(allocator, &config);
+    // deinit should free all these without issues
+    config.deinit(allocator);
 }
 
 test "CLI - empty arguments edge case" {
@@ -377,7 +377,7 @@ test "CLI - empty arguments edge case" {
     const allocator = gpa.allocator();
 
     const config = try parseTestArgs(allocator, &[_][]const u8{});
-    defer cli.deinitAppConfig(allocator, &config);
+    defer config.deinit(allocator);
 
     // Should have default values
     try testing.expect(config.should_continue);
@@ -391,12 +391,12 @@ test "CLI - complex argument combinations" {
 
     // Test combination that disables sudo
     const config1 = try parseTestArgs(allocator, &[_][]const u8{"--lint", "menu.toml", "--no-sudo"});
-    defer cli.deinitAppConfig(allocator, &config1);
+    defer config1.deinit(allocator);
     try testing.expect(!config1.use_sudo); // Both flags should result in no sudo
 
     // Test combination with theme operations
     const config2 = try parseTestArgs(allocator, &[_][]const u8{"--write-theme", "out.toml", "--theme", "forest"});
-    defer cli.deinitAppConfig(allocator, &config2);
+    defer config2.deinit(allocator);
     try testing.expect(!config2.use_sudo); // write-theme disables sudo
     try testing.expect(config2.theme_spec != null);
     try testing.expect(config2.write_theme_path != null);

@@ -13,10 +13,18 @@ pub const BuiltinTheme = enum {
     fire,
     rainbow,
     greyscale,
-    high_contrast,
     
+    const theme_map = std.StaticStringMap(BuiltinTheme).initComptime(.{
+        .{ "nocturne", .nocturne },
+        .{ "forest", .forest },
+        .{ "water", .water },
+        .{ "nature", .nature },
+        .{ "fire", .fire },
+        .{ "rainbow", .rainbow },
+        .{ "greyscale", .greyscale },
+    });
+
     pub fn fromString(name: []const u8) ?BuiltinTheme {
-        // Convert input to lowercase for case-insensitive matching
         var lowercase_buf: [32]u8 = undefined;
         if (name.len > lowercase_buf.len) return null;
         
@@ -25,15 +33,9 @@ pub const BuiltinTheme = enum {
         }
         const lowercase_name = lowercase_buf[0..name.len];
         
-        // Try exact matches first
-        if (std.mem.eql(u8, lowercase_name, "nocturne")) return .nocturne;
-        if (std.mem.eql(u8, lowercase_name, "forest")) return .forest;
-        if (std.mem.eql(u8, lowercase_name, "water")) return .water;
-        if (std.mem.eql(u8, lowercase_name, "nature")) return .nature;
-        if (std.mem.eql(u8, lowercase_name, "fire")) return .fire;
-        if (std.mem.eql(u8, lowercase_name, "rainbow")) return .rainbow;
-        if (std.mem.eql(u8, lowercase_name, "greyscale")) return .greyscale;
-        if (std.mem.eql(u8, lowercase_name, "high_contrast")) return .high_contrast;
+        if (theme_map.get(lowercase_name)) |theme| {
+            return theme;
+        }
         
         // Fuzzy matching - find theme that starts with the input
         const themes = getAllThemes();
@@ -64,12 +66,11 @@ pub const BuiltinTheme = enum {
             .fire => "fire",
             .rainbow => "rainbow",
             .greyscale => "greyscale",
-            .high_contrast => "high_contrast",
         };
     }
     
     pub fn getAllThemes() []const BuiltinTheme {
-        return &[_]BuiltinTheme{ .nocturne, .forest, .water, .nature, .fire, .rainbow, .greyscale, .high_contrast };
+        return &[_]BuiltinTheme{ .nocturne, .forest, .water, .nature, .fire, .rainbow, .greyscale };
     }
 };
 
@@ -415,7 +416,6 @@ pub const Theme = struct {
             },
             .rainbow => Theme.createRainbowTheme(),
             .greyscale => Theme.createGreyscaleTheme(),
-            .high_contrast => Theme.createHighContrastTheme(),
         };
     }
 

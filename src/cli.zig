@@ -21,7 +21,80 @@ pub const AppConfig = struct {
     debug_file_path: ?[]const u8 = null,
     batch_mode: bool = false,
     answer_file: ?[]const u8 = null,
+    
+    pub fn deinit(self: *const AppConfig, allocator: std.mem.Allocator) void {
+        const info = @typeInfo(AppConfig);
+        
+        inline for (info.@"struct".fields) |field| {
+            const field_info = @typeInfo(field.type);
+            
+            // Check if it's an optional type
+            if (field_info == .optional) {
+                const child_type = field_info.optional.child;
+                const child_info = @typeInfo(child_type);
+                
+                // Check if it's an optional slice (like ?[]const u8)
+                if (child_info == .pointer and child_info.pointer.size == .slice) {
+                    // Get the field value and free if not null
+                    if (@field(self, field.name)) |value| {
+                        allocator.free(value);
+                    }
+                }
+            }
+        }
+    }
 };
+
+// Command line argument types
+const NoArgAction = enum {
+    version,
+    help,
+    no_sudo,
+    list_themes,
+    show_themes,
+    batch,
+};
+
+const WithArgAction = enum {
+    config,
+    theme,
+    install_config_dir,
+    config_options,
+    lint,
+    write_theme,
+    show_theme,
+    log_file,
+    debug,
+    answer_file,
+};
+
+// Static maps for command line argument parsing
+const no_arg_map = std.StaticStringMap(NoArgAction).initComptime(.{
+    .{ "--version", .version },
+    .{ "-v", .version },
+    .{ "--help", .help },
+    .{ "-h", .help },
+    .{ "--no-sudo", .no_sudo },
+    .{ "-n", .no_sudo },
+    .{ "--list-themes", .list_themes },
+    .{ "--show-themes", .show_themes },
+    .{ "--batch", .batch },
+});
+
+const with_arg_map = std.StaticStringMap(WithArgAction).initComptime(.{
+    .{ "--config", .config },
+    .{ "-c", .config },
+    .{ "--theme", .theme },
+    .{ "-t", .theme },
+    .{ "--install-config-dir", .install_config_dir },
+    .{ "--config-options", .config_options },
+    .{ "--lint", .lint },
+    .{ "--write-theme", .write_theme },
+    .{ "--show-theme", .show_theme },
+    .{ "--log-file", .log_file },
+    .{ "--debug", .debug },
+    .{ "--answer-file", .answer_file },
+});
 
 pub fn printVersion() void {
     std.debug.print("nwiz {s}\n", .{build_options.tag});
@@ -99,17 +172,17 @@ pub fn showTheme(theme_name: []const u8) void {
     std.debug.print("\n\n", .{});
     
     std.debug.print("  UI Colors:\n", .{});
-    std.debug.print("    Selected:     \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (menu selection)\n", .{
+    std.debug.print("    Selected:     \x1b[38;2;{d};{d};{d}m#####\x1b[0m  (menu selection)\n", .{
         theme_instance.selected_menu_item.r,
         theme_instance.selected_menu_item.g,
         theme_instance.selected_menu_item.b,
     });
-    std.debug.print("    Header:       \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (menu headers)\n", .{
+    std.debug.print("    Header:       \x1b[38;2;{d};{d};{d}m#####\x1b[0m  (menu headers)\n", .{
         theme_instance.menu_header.r,
         theme_instance.menu_header.g,
         theme_instance.menu_header.b,
     });
-    std.debug.print("    Border:       \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (window borders)\n", .{
+    std.debug.print("    Border:       \x1b[38;2;{d};{d};{d}m#####\x1b[0m  (window borders)\n", .{
         theme_instance.border.r,
         theme_instance.border.g,
         theme_instance.border.b,
@@ -139,24 +212,24 @@ pub fn showThemes() void {
         std.debug.print("\n", .{});
         
         std.debug.print("  UI Colors:\n", .{});
-        std.debug.print("    Selected:     \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (menu selection)\n", .{
+        std.debug.print("    Selected:     \x1b[38;2;{d};{d};{d}m#####\x1b[0m  (menu selection)\n", .{
             theme_instance.selected_menu_item.r,
             theme_instance.selected_menu_item.g,
             theme_instance.selected_menu_item.b,
         });
-        std.debug.print("    Header:       \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (menu headers)\n", .{
+        std.debug.print("    Header:       \x1b[38;2;{d};{d};{d}m#####\x1b[0m  (menu headers)\n", .{
             theme_instance.menu_header.r,
             theme_instance.menu_header.g,
             theme_instance.menu_header.b,
         });
-        std.debug.print("    Border:       \x1b[38;2;{d};{d};{d}m█████\x1b[0m  (window borders)\n", .{
+        std.debug.print("    Border:       \x1b[38;2;{d};{d};{d}m#####\x1b[0m  (window borders)\n", .{
             theme_instance.border.r,
             theme_instance.border.g,
             theme_instance.border.b,
         });
         
         std.debug.print("\n  Usage: nwiz --theme {s}\n", .{theme_name});
-        std.debug.print("  ────────────────────────────────────\n\n", .{});
+        std.debug.print("  ------------------------------------\n\n", .{});
     }
     
     std.debug.print("You can also use custom theme files:\n", .{});
@@ -196,112 +269,137 @@ pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
-            printVersion();
-            app_config.should_continue = false;
-            return app_config;
-        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            printHelp();
-            app_config.should_continue = false;
-            return app_config;
-        } else if (std.mem.eql(u8, arg, "--list-themes")) {
-            listThemes();
-            app_config.should_continue = false;
-            return app_config;
-        } else if (std.mem.eql(u8, arg, "--show-theme")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --show-theme requires a theme name\n", .{});
-                app_config.should_continue = false;
-                return app_config;
+        
+        // First check no-arg options
+        if (no_arg_map.get(arg)) |action| {
+            switch (action) {
+                .version => {
+                    printVersion();
+                    app_config.should_continue = false;
+                    return app_config;
+                },
+                .help => {
+                    printHelp();
+                    app_config.should_continue = false;
+                    return app_config;
+                },
+                .no_sudo => {
+                    app_config.use_sudo = false;
+                },
+                .list_themes => {
+                    listThemes();
+                    app_config.should_continue = false;
+                    return app_config;
+                },
+                .show_themes => {
+                    showThemes();
+                    app_config.should_continue = false;
+                    return app_config;
+                },
+                .batch => {
+                    app_config.batch_mode = true;
+                },
             }
-            showTheme(args[i]);
-            app_config.should_continue = false;
-            return app_config;
-        } else if (std.mem.eql(u8, arg, "--show-themes")) {
-            showThemes();
-            app_config.should_continue = false;
-            return app_config;
-        } else if (std.mem.eql(u8, arg, "--no-sudo") or std.mem.eql(u8, arg, "-n")) {
-            app_config.use_sudo = false;
-        } else if (std.mem.eql(u8, arg, "--config") or std.mem.eql(u8, arg, "-c")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --config requires a file path\n", .{});
-                app_config.should_continue = false;
-                return app_config;
+        } else if (with_arg_map.get(arg)) |action| {
+            // Handle arguments that require a value
+            switch (action) {
+                .config => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --config requires a file path\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    app_config.config_file = try allocator.dupe(u8, args[i]);
+                },
+                .theme => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --theme requires a theme name or file path\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    app_config.theme_spec = try allocator.dupe(u8, args[i]);
+                },
+                .install_config_dir => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --install-config-dir requires a directory path\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    app_config.install_config_dir = try allocator.dupe(u8, args[i]);
+                },
+                .config_options => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --config-options requires an install.toml file path\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    app_config.config_options = try allocator.dupe(u8, args[i]);
+                    app_config.use_sudo = false;
+                },
+                .lint => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --lint requires a menu.toml file path\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    app_config.lint_menu_file = try allocator.dupe(u8, args[i]);
+                    app_config.use_sudo = false;
+                },
+                .write_theme => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --write-theme requires a file path\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    app_config.write_theme_path = try allocator.dupe(u8, args[i]);
+                    app_config.use_sudo = false;
+                },
+                .show_theme => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --show-theme requires a theme name\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    showTheme(args[i]);
+                    app_config.should_continue = false;
+                    return app_config;
+                },
+                .log_file => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --log-file requires a file path\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    app_config.log_file_path = try allocator.dupe(u8, args[i]);
+                },
+                .debug => {
+                    // Check if next argument exists and is not another flag
+                    if (i + 1 < args.len and !std.mem.startsWith(u8, args[i + 1], "--") and !std.mem.startsWith(u8, args[i + 1], "-")) {
+                        i += 1;
+                        app_config.debug_file_path = try allocator.dupe(u8, args[i]);
+                    } else {
+                        // Use default debug file name
+                        app_config.debug_file_path = try allocator.dupe(u8, "nwiz-debug.log");
+                    }
+                },
+                .answer_file => {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("Error: --answer-file requires a file path\n", .{});
+                        app_config.should_continue = false;
+                        return app_config;
+                    }
+                    app_config.answer_file = try allocator.dupe(u8, args[i]);
+                },
             }
-            app_config.config_file = try allocator.dupe(u8, args[i]);
-        } else if (std.mem.eql(u8, arg, "--theme") or std.mem.eql(u8, arg, "-t")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --theme requires a theme name or file path\n", .{});
-                app_config.should_continue = false;
-                return app_config;
-            }
-            app_config.theme_spec = try allocator.dupe(u8, args[i]);
-        } else if (std.mem.eql(u8, arg, "--install-config-dir")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --install-config-dir requires a directory path\n", .{});
-                app_config.should_continue = false;
-                return app_config;
-            }
-            app_config.install_config_dir = try allocator.dupe(u8, args[i]);
-        } else if (std.mem.eql(u8, arg, "--config-options")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --config-options requires an install.toml file path\n", .{});
-                app_config.should_continue = false;
-                return app_config;
-            }
-            app_config.config_options = try allocator.dupe(u8, args[i]);
-            app_config.use_sudo = false;
-        } else if (std.mem.eql(u8, arg, "--lint")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --lint requires a menu.toml file path\n", .{});
-                app_config.should_continue = false;
-                return app_config;
-            }
-            app_config.lint_menu_file = try allocator.dupe(u8, args[i]);
-            app_config.use_sudo = false;
-        } else if (std.mem.eql(u8, arg, "--write-theme")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --write-theme requires a file path\n", .{});
-                app_config.should_continue = false;
-                return app_config;
-            }
-            app_config.write_theme_path = try allocator.dupe(u8, args[i]);
-            app_config.use_sudo = false;
-        } else if (std.mem.eql(u8, arg, "--log-file")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --log-file requires a file path\n", .{});
-                app_config.should_continue = false;
-                return app_config;
-            }
-            app_config.log_file_path = try allocator.dupe(u8, args[i]);
-        } else if (std.mem.eql(u8, arg, "--debug")) {
-            // Check if next argument exists and is not another flag
-            if (i + 1 < args.len and !std.mem.startsWith(u8, args[i + 1], "--")) {
-                i += 1;
-                app_config.debug_file_path = try allocator.dupe(u8, args[i]);
-            } else {
-                // Use default debug file name
-                app_config.debug_file_path = try allocator.dupe(u8, "nwiz-debug.log");
-            }
-        } else if (std.mem.eql(u8, arg, "--batch")) {
-            app_config.batch_mode = true;
-        } else if (std.mem.eql(u8, arg, "--answer-file")) {
-            i += 1;
-            if (i >= args.len) {
-                std.debug.print("Error: --answer-file requires a file path\n", .{});
-                app_config.should_continue = false;
-                return app_config;
-            }
-            app_config.answer_file = try allocator.dupe(u8, args[i]);
         } else {
             std.debug.print("Error: Unknown argument '{s}'\n", .{arg});
             std.debug.print("Use --help for usage information\n", .{});
@@ -329,37 +427,4 @@ pub fn parseArgs(allocator: std.mem.Allocator) !AppConfig {
     }
 
     return app_config;
-}
-
-pub fn deinitAppConfig(allocator: std.mem.Allocator, app_config: *const AppConfig) void {
-    if (app_config.config_file) |config_file| {
-        allocator.free(config_file);
-    }
-    if (app_config.theme_spec) |theme_spec| {
-        allocator.free(theme_spec);
-    }
-    if (app_config.install_config_dir) |install_config_dir| {
-        allocator.free(install_config_dir);
-    }
-    if (app_config.config_options) |config_options_path| {
-        allocator.free(config_options_path);
-    }
-    if (app_config.lint_menu_file) |lint_path| {
-        allocator.free(lint_path);
-    }
-    if (app_config.write_theme_path) |write_theme_path| {
-        allocator.free(write_theme_path);
-    }
-    if (app_config.show_theme_name) |show_theme_name| {
-        allocator.free(show_theme_name);
-    }
-    if (app_config.log_file_path) |log_file_path| {
-        allocator.free(log_file_path);
-    }
-    if (app_config.debug_file_path) |debug_file_path| {
-        allocator.free(debug_file_path);
-    }
-    if (app_config.answer_file) |answer_file| {
-        allocator.free(answer_file);
-    }
 }

@@ -27,6 +27,10 @@ const debug = @import("debug.zig");
 const batch = @import("batch.zig");
 const batch_executor = @import("batch_executor.zig");
 
+const signal_handler = @import("main/signal_handler.zig");
+const global_state = @import("main/global_state.zig");
+const app_lifecycle = @import("main/app_lifecycle.zig");
+
 // Suppress vaxis info logging messages  
 pub const std_options: std.Options = .{
     .log_level = .warn, // Only show warnings and errors, suppress info messages
@@ -124,7 +128,7 @@ pub fn main() !void {
         err_handler.handleError(err, .general, "Failed to parse command line arguments");
         return;
     };
-    defer cli.deinitAppConfig(allocator, &app_config);
+    defer app_config.deinit(allocator);
     
     if (!app_config.should_continue) {
         return;
@@ -136,7 +140,7 @@ pub fn main() !void {
     }
 
     // Set up signal handlers
-    try setupSignalHandlers();
+    try signal_handler.setupSignalHandlers();
 
     // Validate configuration and start TUI
     try validateAndStartTUI(allocator, &app_config, &err_handler);
@@ -244,10 +248,8 @@ fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppC
         }
     }
 
-    // Handle authentication after configurations are loaded
     try handleAuthentication(app_config, &configs.menu_config);
 
-    // Initialize session logging
     const log_file_path = determineLogFilePath(app_config, &configs.menu_config);
     session_logger.SessionLogger.testWriteAccess(allocator, log_file_path) catch |err| {
         debug.debugLog("Failed to initialize log file '{s}': {}", .{ log_file_path, err });
@@ -267,7 +269,6 @@ fn validateAndStartTUI(allocator: std.mem.Allocator, app_config: *const cli.AppC
     }
 
 
-    // Initialize and run TUI
     try initializeAndRunTUI(allocator, &configs, app_config, err_handler);
 }
 

@@ -97,11 +97,7 @@ pub fn loadConfigurations(
     
     // Keep a copy of the install path since config_paths will be freed
     const install_path_copy = try allocator.dupe(u8, config_paths.install_path);
-    defer {
-        allocator.free(config_paths.menu_path);
-        allocator.free(config_paths.theme_path);
-        allocator.free(config_paths.install_path);
-    }
+    defer config_paths.deinit(allocator);
 
     // Load menu configuration
     var menu_config = config.loadMenuConfig(allocator, config_paths.menu_path) catch |err| {

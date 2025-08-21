@@ -72,9 +72,19 @@ pub const DisclaimerDialog = struct {
     }
     
     pub fn deinit(self: *Self) void {
-        self.allocator.free(self.disclaimer_text);
-        self.allocator.free(self.menu_item_name);
-        self.allocator.free(self.dialog_title);
+        const info = @typeInfo(DisclaimerDialog);
+        
+        inline for (info.@"struct".fields) |field| {
+            const field_info = @typeInfo(field.type);
+            
+            // Check if it's a string slice ([]const u8)
+            if (field_info == .pointer and field_info.pointer.size == .slice) {
+                const child_info = @typeInfo(field_info.pointer.child);
+                if (child_info == .int and field_info.pointer.child == u8) {
+                    self.allocator.free(@field(self, field.name));
+                }
+            }
+        }
     }
     
     pub fn handleKey(self: *Self, key: vaxis.Key, window_height: u16) void {
@@ -140,10 +150,17 @@ pub const DisclaimerDialog = struct {
         var row: u16 = y_offset;
         const end_x: u16 = x_offset + dialog_width;
         
+        // Get proper border characters for the terminal mode
+        const border_chars = switch (tty_compat.getBorderGlyphs(self.terminal_mode)) {
+            .single_rounded => [6][]const u8{ "╭", "─", "╮", "│", "╯", "╰" },
+            .single_square => [6][]const u8{ "┌", "─", "┐", "│", "┘", "└" },
+            .custom => |custom| custom,
+        };
+        
         // Draw top border
         var col: u16 = x_offset;
         while (col < end_x) : (col += 1) {
-            const border_char = if (col == x_offset) "┌" else if (col == end_x - 1) "┐" else "─";
+            const border_char = if (col == x_offset) border_chars[0] else if (col == end_x - 1) border_chars[2] else border_chars[1];
             win.writeCell(col, row, .{ .char = .{ .grapheme = border_char }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
         }
         
@@ -154,7 +171,7 @@ pub const DisclaimerDialog = struct {
         col = x_offset;
         while (col < end_x) : (col += 1) {
             if (col == x_offset or col == end_x - 1) {
-                win.writeCell(col, row, .{ .char = .{ .grapheme = "│" }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
+                win.writeCell(col, row, .{ .char = .{ .grapheme = border_chars[3] }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
             } else {
                 win.writeCell(col, row, .{ .char = .{ .grapheme = " " }, .style = .{} });
             }
@@ -168,11 +185,16 @@ pub const DisclaimerDialog = struct {
         const title_start: u16 = x_offset + (dialog_width - @as(u16, @intCast(self.dialog_title.len))) / 2;
         _ = win.print(&.{title_segment}, .{ .col_offset = title_start, .row_offset = row });
         
-        // Draw separator
+        // Draw separator (use horizontal line with appropriate junctions for border style)
         row += 1;
         col = x_offset;
         while (col < end_x) : (col += 1) {
-            const sep_char = if (col == x_offset) "├" else if (col == end_x - 1) "┤" else "─";
+            const sep_char = if (col == x_offset) 
+                (if (self.terminal_mode == .pty) "├" else "+")
+            else if (col == end_x - 1) 
+                (if (self.terminal_mode == .pty) "┤" else "+")
+            else 
+                border_chars[1];
             win.writeCell(col, row, .{ .char = .{ .grapheme = sep_char }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
         }
         
@@ -191,7 +213,7 @@ pub const DisclaimerDialog = struct {
                 col = x_offset;
                 while (col < end_x) : (col += 1) {
                     if (col == x_offset or col == end_x - 1) {
-                        win.writeCell(col, row, .{ .char = .{ .grapheme = "│" }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
+                        win.writeCell(col, row, .{ .char = .{ .grapheme = border_chars[3] }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
                     } else {
                         win.writeCell(col, row, .{ .char = .{ .grapheme = " " }, .style = .{} });
                     }
@@ -214,7 +236,7 @@ pub const DisclaimerDialog = struct {
             col = x_offset;
             while (col < end_x) : (col += 1) {
                 if (col == x_offset or col == end_x - 1) {
-                    win.writeCell(col, row, .{ .char = .{ .grapheme = "│" }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
+                    win.writeCell(col, row, .{ .char = .{ .grapheme = border_chars[3] }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
                 } else {
                     win.writeCell(col, row, .{ .char = .{ .grapheme = " " }, .style = .{} });
                 }
@@ -251,7 +273,7 @@ pub const DisclaimerDialog = struct {
                 col = x_offset;
                 while (col < end_x) : (col += 1) {
                     if (col == x_offset or col == end_x - 1) {
-                        win.writeCell(col, row, .{ .char = .{ .grapheme = "│" }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
+                        win.writeCell(col, row, .{ .char = .{ .grapheme = border_chars[3] }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
                     } else {
                         win.writeCell(col, row, .{ .char = .{ .grapheme = " " }, .style = .{} });
                     }
@@ -263,7 +285,12 @@ pub const DisclaimerDialog = struct {
         // Draw separator before buttons
         col = x_offset;
         while (col < end_x) : (col += 1) {
-            const sep_char = if (col == x_offset) "├" else if (col == end_x - 1) "┤" else "─";
+            const sep_char = if (col == x_offset) 
+                (if (self.terminal_mode == .pty) "├" else "+")
+            else if (col == end_x - 1) 
+                (if (self.terminal_mode == .pty) "┤" else "+")
+            else 
+                border_chars[1];
             win.writeCell(col, row, .{ .char = .{ .grapheme = sep_char }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
         }
         
@@ -272,7 +299,7 @@ pub const DisclaimerDialog = struct {
         col = x_offset;
         while (col < end_x) : (col += 1) {
             if (col == x_offset or col == end_x - 1) {
-                win.writeCell(col, row, .{ .char = .{ .grapheme = "│" }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
+                win.writeCell(col, row, .{ .char = .{ .grapheme = border_chars[3] }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
             } else {
                 win.writeCell(col, row, .{ .char = .{ .grapheme = " " }, .style = .{} });
             }
@@ -291,14 +318,15 @@ pub const DisclaimerDialog = struct {
         row += 1;
         col = x_offset;
         while (col < end_x) : (col += 1) {
-            const border_char = if (col == x_offset) "└" else if (col == end_x - 1) "┘" else "─";
+            const border_char = if (col == x_offset) border_chars[5] else if (col == end_x - 1) border_chars[4] else border_chars[1];
             win.writeCell(col, row, .{ .char = .{ .grapheme = border_char }, .style = .{ .fg = self.app_theme.border.toVaxisColorCompat(self.terminal_mode) } });
         }
         
-        // Show scroll indicators if needed
+        // Show scroll indicators if needed (terminal-mode aware)
         if (self.scroll_offset > 0) {
+            const up_indicator = if (self.terminal_mode == .pty) "▲ More above" else "^ More above";
             const up_segment = vaxis.Segment{
-                .text = "▲ More above",
+                .text = up_indicator,
                 .style = .{ .fg = self.app_theme.light_grey.toVaxisColorCompat(self.terminal_mode) },
             };
             _ = win.print(&.{up_segment}, .{ .col_offset = x_offset + 2, .row_offset = content_start_row - 1 });
@@ -311,8 +339,9 @@ pub const DisclaimerDialog = struct {
         
         const visible_content_height: usize = @intCast(content_height - 1); // -1 for button area  
         if (total_lines > visible_content_height and self.scroll_offset < total_lines - visible_content_height) {
+            const down_indicator = if (self.terminal_mode == .pty) "▼ More below" else "v More below";
             const down_segment = vaxis.Segment{
-                .text = "▼ More below",
+                .text = down_indicator,
                 .style = .{ .fg = self.app_theme.light_grey.toVaxisColorCompat(self.terminal_mode) },
             };
             _ = win.print(&.{down_segment}, .{ .col_offset = x_offset + 2, .row_offset = row - 2 });
